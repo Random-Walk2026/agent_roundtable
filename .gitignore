@@ -1,0 +1,22 @@
+.DS_Store
+.env
+.venv/
+.vscode/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local/private corpora and generated artifacts. Do not publish these.
+knowledge/**/*.md
+knowledge/**/*.markdown
+knowledge/**/*.txt
+knowledge/**/*.pdf
+knowledge/**/*.epub
+knowledge/**/*.jsonl
+!knowledge/README.md
+!knowledge/**/.gitkeep
+logs/**
+!logs/.gitkeep
+indexes/**
+vector_db/chroma/**
+!vector_db/chroma/.gitkeep

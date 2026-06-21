@@ -1,0 +1,50 @@
+{
+  "description": "Committed per-agent LLM routing. Store real API keys in .env; this file only names provider, model, and api_key_env.",
+  "agents": {
+    "macro_economist": {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "api_key_env": "OPENROUTER_API_KEY_1"
+    },
+    "investing_master": {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "api_key_env": "OPENROUTER_API_KEY_1"
+    },
+    "ai_researcher": {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "api_key_env": "OPENROUTER_API_KEY_1"
+    },
+    "philosophy_expert": {
+      "provider": "openrouter",
+      "model": "poolside/laguna-m.1:free",
+      "api_key_env": "OPENROUTER_API_KEY_1"
+    },
+    "history_strategist": {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "api_key_env": "OPENROUTER_API_KEY_1"
+    },
+    "buffett_inspired": {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "api_key_env": "OPENROUTER_API_KEY_1"
+    },
+    "munger_inspired": {
+      "provider": "openrouter",
+      "model": "poolside/laguna-m.1:free",
+      "api_key_env": "OPENROUTER_API_KEY_1"
+    },
+    "dalio_inspired": {
+      "provider": "openrouter",
+      "model": "openai/gpt-oss-120b:free",
+      "api_key_env": "OPENROUTER_API_KEY_1"
+    },
+    "hayek_inspired": {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "api_key_env": "OPENROUTER_API_KEY_1"
+    }
+  }
+}

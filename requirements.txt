@@ -1,0 +1,9 @@
+langgraph>=0.2
+langchain>=0.2
+langchain-text-splitters>=0.2
+chromadb>=0.5
+openai>=1.0
+PyYAML>=6.0
+python-dotenv>=1.0
+pytest>=8.0
+streamlit>=1.36

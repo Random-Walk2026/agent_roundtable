@@ -1,0 +1,9 @@
+name: "experts"
+description: "书籍级长文驱动的主题专家主线圆桌：宏观、投资、AI、哲学与历史战略"
+members:
+  - macro_economist
+  - investing_master
+  - ai_researcher
+  - philosophy_expert
+  - history_strategist
+moderator: "moderator"
