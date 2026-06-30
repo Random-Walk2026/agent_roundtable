@@ -16,6 +16,7 @@ class Persona:
     catchphrases: list[str]
     llm_config: dict[str, Any]
     rag_expert_name: str | None = None
+    knowledge_scope: str | None = None
     agent_type: str = "persona"
     profile: dict[str, Any] | None = None
 
@@ -40,6 +41,8 @@ class RoundtableMessage(TypedDict, total=False):
     type: str
     content: str
     references: list[str]
+    reference_details: list[dict[str, str]]
+    epistemic_tags: list[str]
     llm_provider: str
     llm_model: str
 

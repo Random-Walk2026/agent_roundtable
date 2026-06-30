@@ -1,8 +1,9 @@
 name: "persona_inspired"
-description: "具体人物风格副线圆桌：当前仅使用人格设定，等待未来接入人物专属书籍材料"
+description: "具体人物风格副线圆桌：人格设定 + 可选多来源语料"
 members:
-  - buffett_inspired
-  - munger_inspired
-  - dalio_inspired
-  - hayek_inspired
+  - buffett
+  - munger
+  - dalio
+  - hayek
+  - desmond_shum
 moderator: "moderator"

@@ -6,6 +6,8 @@ from typing import Any
 
 import yaml
 
+from rag.config import infer_knowledge_scope
+from roundtable.discovery import validate_council_members
 from roundtable.state import Council, Persona
 
 
@@ -62,6 +64,16 @@ def load_persona(persona_id: str, root_dir: Path | str | None = None) -> Persona
     root = Path(root_dir) if root_dir else PROJECT_ROOT
     config_path = _find_persona_config(root, persona_id)
     data = _load_structured_file(config_path)
+    agent_type = str(data.get("agent_type") or _agent_type_for_path(config_path))
+    rag_expert_name = (
+        str(data.get("rag_expert_name") or data.get("expert_name") or data.get("rag_corpus_id"))
+        if data.get("rag_expert_name") or data.get("expert_name") or data.get("rag_corpus_id")
+        else None
+    )
+    knowledge_scope = infer_knowledge_scope(
+        agent_type=agent_type,
+        explicit_scope=str(data.get("knowledge_scope")) if data.get("knowledge_scope") else None,
+    )
     return Persona(
         id=persona_id,
         name=str(data["name"]),
@@ -72,12 +84,9 @@ def load_persona(persona_id: str, root_dir: Path | str | None = None) -> Persona
         weaknesses=list(data.get("weaknesses", [])),
         catchphrases=list(data.get("catchphrases", [])),
         llm_config=dict(data.get("llm", {})),
-        rag_expert_name=(
-            str(data.get("rag_expert_name") or data.get("expert_name"))
-            if data.get("rag_expert_name") or data.get("expert_name")
-            else None
-        ),
-        agent_type=str(data.get("agent_type") or _agent_type_for_path(config_path)),
+        rag_expert_name=rag_expert_name,
+        knowledge_scope=knowledge_scope,
+        agent_type=agent_type,
         profile=dict(data.get("profile", {})),
     )
 
@@ -88,10 +97,12 @@ def load_council(council_name: str, root_dir: Path | str | None = None) -> Counc
     members = data.get("members", [])
     if not isinstance(members, list) or not members:
         raise ValueError(f"Council '{council_name}' must define at least one member")
+    member_ids = [str(member) for member in members]
+    validate_council_members(member_ids, root)
     return Council(
         name=str(data.get("name", council_name)),
         description=str(data.get("description", "")),
-        members=[str(member) for member in members],
+        members=member_ids,
         moderator_llm_config=dict(data.get("moderator_llm", {})),
         moderator=str(data.get("moderator", "moderator")),
     )

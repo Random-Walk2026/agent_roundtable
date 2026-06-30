@@ -236,24 +236,24 @@ class CapturingLLM(MockLLM):
 def test_agent_uses_rag_retrieved_context_before_speaking(tmp_path: Path):
     (tmp_path / "config" / "domain_experts").mkdir(parents=True)
     (tmp_path / "config" / "councils").mkdir()
-    (tmp_path / "knowledge" / "macro_economist" / "keynes").mkdir(parents=True)
-    (tmp_path / "knowledge" / "macro_economist" / "keynes" / "demand.md").write_text(
+    (tmp_path / "knowledge" / "experts" / "macroeconomics" / "keynes").mkdir(parents=True)
+    (tmp_path / "knowledge" / "experts" / "macroeconomics" / "keynes" / "demand.md").write_text(
         "# Keynesian Demand\n\n"
         "## Fiscal Policy\n\n"
         "Aggregate demand and employment can be supported by countercyclical fiscal policy.",
         encoding="utf-8",
     )
-    (tmp_path / "config" / "domain_experts" / "macro_economist.yaml").write_text(
+    (tmp_path / "config" / "domain_experts" / "macroeconomics.yaml").write_text(
         yaml.safe_dump(
             {
-                "name": "Macro Economist",
+                "name": "Macroeconomics",
                 "role": "宏观经济主题专家",
                 "worldview": "用总需求、通胀、就业和政策反馈分析问题",
                 "speaking_style": "结构化、克制",
                 "strengths": ["宏观框架"],
                 "weaknesses": ["可能低估个体差异"],
                 "catchphrases": ["先看总需求"],
-                "rag_expert_name": "macro_economist",
+                "rag_expert_name": "macroeconomics",
             },
             allow_unicode=True,
         ),
@@ -264,7 +264,7 @@ def test_agent_uses_rag_retrieved_context_before_speaking(tmp_path: Path):
             {
                 "name": "macro",
                 "description": "宏观圆桌",
-                "members": ["macro_economist"],
+                "members": ["macroeconomics"],
             },
             allow_unicode=True,
         ),
@@ -285,5 +285,69 @@ def test_agent_uses_rag_retrieved_context_before_speaking(tmp_path: Path):
     agent_message = next(message for message in result["messages"] if message["type"] == "agent")
     assert "retrieved_context" in agent_prompt
     assert "countercyclical fiscal policy" in agent_prompt
-    assert agent_message["references"] == ["knowledge/macro_economist/keynes/demand.md"]
-    assert "引用来源：knowledge/macro_economist/keynes/demand.md" in agent_message["content"]
+    assert agent_message["references"] == ["knowledge/experts/macroeconomics/keynes/demand.md"]
+    assert "引用来源：knowledge/experts/macroeconomics/keynes/demand.md" in agent_message["content"]
+    assert "本地语料" in agent_message.get("epistemic_tags", [])
+    assert "需联网核实" in agent_message.get("epistemic_tags", [])
+
+
+def test_agent_round_rotates_speaking_order_across_rounds(tmp_path: Path):
+    (tmp_path / "config" / "domain_experts").mkdir(parents=True)
+    (tmp_path / "config" / "councils").mkdir()
+    for agent_id, name in [("alpha", "Alpha"), ("beta", "Beta")]:
+        (tmp_path / "config" / "domain_experts" / f"{agent_id}.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "name": name,
+                    "role": name,
+                    "worldview": name,
+                    "speaking_style": "direct",
+                    "strengths": [],
+                    "weaknesses": [],
+                    "catchphrases": [],
+                },
+                allow_unicode=True,
+            ),
+            encoding="utf-8",
+        )
+    (tmp_path / "config" / "councils" / "pair.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "pair",
+                "description": "two-agent council",
+                "members": ["alpha", "beta"],
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_roundtable(
+        topic="轮换测试",
+        council_name="pair",
+        rounds=2,
+        llm=MockLLM(),
+        root_dir=tmp_path,
+        output_dir=tmp_path / "logs",
+    )
+
+    round_one_agents = [
+        message["speaker_id"]
+        for message in result["messages"]
+        if message.get("type") == "agent" and message.get("round") == 1
+    ]
+    round_two_agents = [
+        message["speaker_id"]
+        for message in result["messages"]
+        if message.get("type") == "agent" and message.get("round") == 2
+    ]
+    assert round_one_agents == ["alpha", "beta"]
+    assert round_two_agents == ["beta", "alpha"]
+
+
+def test_mixed_council_loads_expert_and_persona_members():
+    from roundtable.loader import load_council_personas
+
+    council, personas = load_council_personas("china_debt")
+    assert [persona.id for persona in personas] == ["macroeconomics", "desmond_shum", "history"]
+    assert council.name == "china_debt"

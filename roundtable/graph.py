@@ -8,7 +8,7 @@ from langgraph.graph import END, START, StateGraph
 from roundtable.agent_llm_config import load_agent_llm_configs
 from roundtable.agents import (
     ProgressCallback,
-    create_agent_node,
+    create_agent_round_node,
     create_final_summary_node,
     create_moderator_question_node,
     create_round_summary_node,
@@ -31,32 +31,29 @@ def build_roundtable_graph(
     if not personas:
         raise ValueError("At least one persona is required to build a roundtable graph")
 
+    graph_root = Path(root_dir) if root_dir else PROJECT_ROOT
+    resolved_agent_llms = agent_llms or {}
+
     builder = StateGraph(RoundtableState)
     builder.add_node(
         "moderator_question",
         create_moderator_question_node(llm, progress_callback),
     )
-
-    previous_node = "moderator_question"
-    graph_root = Path(root_dir) if root_dir else PROJECT_ROOT
-    for persona in personas:
-        node_name = f"agent_{persona.id}"
-        builder.add_node(
-            node_name,
-            create_agent_node(
-                persona,
-                (agent_llms or {}).get(persona.id, llm),
-                root_dir=graph_root,
-                progress_callback=progress_callback,
-            ),
-        )
-        builder.add_edge(previous_node, node_name)
-        previous_node = node_name
-
+    builder.add_node(
+        "agent_round",
+        create_agent_round_node(
+            personas,
+            resolved_agent_llms,
+            llm,
+            root_dir=graph_root,
+            progress_callback=progress_callback,
+        ),
+    )
     builder.add_node("round_summary", create_round_summary_node(llm, progress_callback))
     builder.add_node("final_summary", create_final_summary_node(llm, progress_callback))
     builder.add_edge(START, "moderator_question")
-    builder.add_edge(previous_node, "round_summary")
+    builder.add_edge("moderator_question", "agent_round")
+    builder.add_edge("agent_round", "round_summary")
 
     def should_continue(state: RoundtableState) -> Literal["continue", "finish"]:
         return "continue" if int(state["round"]) < int(state["max_rounds"]) else "finish"

@@ -1,48 +1,53 @@
 {
   "description": "Committed per-agent provider-chain routing. Store real API keys and CLI tokens in .env; this file only names callable model chains and generation tuning.",
   "agents": {
-    "macro_economist": {
+    "macroeconomics": {
       "provider_chain": "antigravity:gemini-3.1-pro-low, gemini:gemini-2.5-flash, claude:sonnet@high, openrouter:nvidia/nemotron-3-super-120b-a12b:free",
       "temperature": 0.3,
       "max_output_tokens": 4096
     },
-    "investing_master": {
+    "investing": {
       "provider_chain": "claude:sonnet@high, antigravity:claude-sonnet-4-6, gemini:gemini-2.5-flash, openrouter:nvidia/nemotron-3-super-120b-a12b:free",
       "temperature": 0.3,
       "max_output_tokens": 4096
     },
-    "ai_researcher": {
+    "computing": {
       "provider_chain": "codex:gpt-5.5@high, antigravity:gemini-3.5-flash-low, gemini:gemini-3.5-flash, openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
       "temperature": 0.25,
       "max_output_tokens": 4096
     },
-    "philosophy_expert": {
+    "philosophy": {
       "provider_chain": "claude:sonnet@medium, gemini:gemini-2.5-pro, openrouter:poolside/laguna-m.1:free",
       "temperature": 0.4,
       "max_output_tokens": 4096
     },
-    "history_strategist": {
+    "history": {
       "provider_chain": "claude:sonnet@high, antigravity:claude-sonnet-4-6, gemini:gemini-2.5-flash, openrouter:nvidia/nemotron-3-super-120b-a12b:free",
       "temperature": 0.35,
       "max_output_tokens": 4096
     },
-    "buffett_inspired": {
+    "buffett": {
       "provider_chain": "claude:sonnet@high, gemini:gemini-2.5-flash, openrouter:nvidia/nemotron-3-super-120b-a12b:free",
       "temperature": 0.35,
       "max_output_tokens": 4096
     },
-    "munger_inspired": {
+    "munger": {
       "provider_chain": "claude:sonnet@high, gemini:gemini-2.5-pro, openrouter:poolside/laguna-m.1:free",
       "temperature": 0.35,
       "max_output_tokens": 4096
     },
-    "dalio_inspired": {
+    "dalio": {
       "provider_chain": "antigravity:gemini-3.1-pro-low, gemini:gemini-2.5-flash, openrouter:openai/gpt-oss-120b:free",
       "temperature": 0.35,
       "max_output_tokens": 4096
     },
-    "hayek_inspired": {
+    "hayek": {
       "provider_chain": "claude:sonnet@medium, gemini:gemini-2.5-flash, openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+      "temperature": 0.35,
+      "max_output_tokens": 4096
+    },
+    "desmond_shum": {
+      "provider_chain": "claude:sonnet@high, gemini:gemini-2.5-flash, openrouter:nvidia/nemotron-3-super-120b-a12b:free",
       "temperature": 0.35,
       "max_output_tokens": 4096
     }

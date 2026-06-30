@@ -5,7 +5,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from rag.config import CHUNK_OVERLAP, CHUNK_SIZE, resolve_paths
+from rag.config import (
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    DEFAULT_EXPERT_WORK_TYPE,
+    EXPERT_WORK_TYPE_FOLDERS,
+    KnowledgeScope,
+    CorpusRef,
+    resolve_corpus,
+    resolve_paths,
+)
 
 try:
     from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -28,17 +37,36 @@ class RagChunk:
     score: float = 0.0
 
 
-def _iter_markdown_files(expert_name: str, root_dir: Path | str = ".") -> list[Path]:
+def _iter_markdown_files(
+    corpus: CorpusRef,
+    root_dir: Path | str = ".",
+    *,
+    source_kinds: set[str] | None = None,
+) -> list[Path]:
     paths = resolve_paths(root_dir)
-    expert_dir = paths.expert_knowledge_dir(expert_name)
+    corpus_dir = paths.corpus_knowledge_dir(corpus)
     files: list[Path] = []
-    if expert_dir.exists():
-        files.extend(
-            path
-            for path in expert_dir.rglob("*")
-            if path.is_file() and path.suffix.lower() in SUPPORTED_MARKDOWN_SUFFIXES
-        )
+    if corpus_dir.exists():
+        for path in corpus_dir.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in SUPPORTED_MARKDOWN_SUFFIXES:
+                continue
+            if source_kinds and corpus.knowledge_scope == "people":
+                kind = _source_kind_for_person_file(corpus_dir, path)
+                if kind not in source_kinds:
+                    continue
+            files.append(path)
     return sorted(dict.fromkeys(files))
+
+
+def _work_type_for_expert_file(expert_dir: Path, file_path: Path) -> str:
+    try:
+        relative = file_path.relative_to(expert_dir)
+        if len(relative.parts) > 1:
+            folder = relative.parts[0].lower()
+            return EXPERT_WORK_TYPE_FOLDERS.get(folder, DEFAULT_EXPERT_WORK_TYPE)
+    except ValueError:
+        pass
+    return DEFAULT_EXPERT_WORK_TYPE
 
 
 def _source_file(path: Path, root_dir: Path) -> str:
@@ -46,6 +74,16 @@ def _source_file(path: Path, root_dir: Path) -> str:
         return str(path.resolve().relative_to(root_dir.resolve()))
     except ValueError:
         return str(path.resolve())
+
+
+def _source_kind_for_person_file(person_dir: Path, file_path: Path) -> str:
+    try:
+        relative = file_path.relative_to(person_dir)
+        if relative.parts:
+            return relative.parts[0]
+    except ValueError:
+        pass
+    return "unknown"
 
 
 def _extract_title(text: str, fallback: str) -> str:
@@ -148,15 +186,29 @@ def clean_markdown_text(text: str) -> str:
 def chunk_markdown_file(
     path: Path,
     *,
-    expert_name: str,
+    corpus: CorpusRef,
     root_dir: Path | str = ".",
     chunk_size: int = CHUNK_SIZE,
     chunk_overlap: int = CHUNK_OVERLAP,
 ) -> list[RagChunk]:
     root = Path(root_dir).expanduser().resolve()
+    paths = resolve_paths(root)
+    corpus_dir = paths.corpus_knowledge_dir(corpus)
     text = clean_markdown_text(path.read_text(encoding="utf-8", errors="ignore"))
     title = _extract_title(text, path.stem.replace("_", " ").title())
     source_file = _source_file(path, root)
+
+    metadata_base: dict[str, Any] = {
+        "corpus_id": corpus.corpus_id,
+        "knowledge_scope": corpus.knowledge_scope,
+        "expert_name": corpus.corpus_id,
+        "source_file": source_file,
+        "title": title,
+    }
+    if corpus.knowledge_scope == "people":
+        metadata_base["source_kind"] = _source_kind_for_person_file(corpus_dir, path)
+    else:
+        metadata_base["work_type"] = _work_type_for_expert_file(corpus_dir, path)
 
     chunks: list[RagChunk] = []
     for chunk_index, (chunk_text, start_index) in enumerate(
@@ -166,9 +218,7 @@ def chunk_markdown_file(
             RagChunk(
                 page_content=chunk_text,
                 metadata={
-                    "expert_name": expert_name,
-                    "source_file": source_file,
-                    "title": title,
+                    **metadata_base,
                     "chapter": _chapter_for_chunk(
                         full_text=text,
                         chunk_text=chunk_text,
@@ -182,6 +232,30 @@ def chunk_markdown_file(
     return chunks
 
 
+def chunk_corpus_markdown(
+    corpus_id: str,
+    *,
+    knowledge_scope: KnowledgeScope = "experts",
+    root_dir: Path | str = ".",
+    chunk_size: int = CHUNK_SIZE,
+    chunk_overlap: int = CHUNK_OVERLAP,
+    source_kinds: set[str] | None = None,
+) -> list[RagChunk]:
+    corpus = resolve_corpus(corpus_id, knowledge_scope=knowledge_scope)
+    chunks: list[RagChunk] = []
+    for path in _iter_markdown_files(corpus, root_dir=root_dir, source_kinds=source_kinds):
+        chunks.extend(
+            chunk_markdown_file(
+                path,
+                corpus=corpus,
+                root_dir=root_dir,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+        )
+    return chunks
+
+
 def chunk_expert_markdown(
     expert_name: str,
     *,
@@ -189,15 +263,10 @@ def chunk_expert_markdown(
     chunk_size: int = CHUNK_SIZE,
     chunk_overlap: int = CHUNK_OVERLAP,
 ) -> list[RagChunk]:
-    chunks: list[RagChunk] = []
-    for path in _iter_markdown_files(expert_name, root_dir=root_dir):
-        chunks.extend(
-            chunk_markdown_file(
-                path,
-                expert_name=expert_name,
-                root_dir=root_dir,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-            )
-        )
-    return chunks
+    return chunk_corpus_markdown(
+        expert_name,
+        knowledge_scope="experts",
+        root_dir=root_dir,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )

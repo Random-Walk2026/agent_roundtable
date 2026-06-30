@@ -5,6 +5,8 @@ from pathlib import Path
 
 from rag.retriever import format_retrieved_context, get_retriever, source_files
 from llm import LLMClient, describe_llm
+from roundtable.epistemics import classify_epistemic_tags, format_reference_details
+from roundtable.order import rotate_personas
 from roundtable.prompts import (
     build_agent_prompt,
     build_final_summary_prompt,
@@ -52,7 +54,15 @@ def _recent_messages_query(topic: str, messages: list[RoundtableMessage], limit:
     return f"{topic} {message_text}".strip()
 
 
-def _rag_expert_name(persona: Persona, root_dir: Path) -> str | None:
+def _retrieval_query(persona: Persona, topic: str, messages: list[RoundtableMessage]) -> str:
+    query = _recent_messages_query(topic, messages)
+    worldview = persona.worldview.strip()
+    if worldview:
+        query = f"{query} {worldview}".strip()
+    return query
+
+
+def _rag_expert_name(persona: Persona) -> str | None:
     if persona.rag_expert_name:
         return persona.rag_expert_name
     return None
@@ -63,6 +73,61 @@ def _with_reference_footer(content: str, references: list[str]) -> str:
     if not missing_references:
         return content
     return f"{content.rstrip()}\n\n引用来源：{', '.join(missing_references)}"
+
+
+def execute_agent_turn(
+    persona: Persona,
+    llm: LLMClient,
+    *,
+    state: RoundtableState,
+    messages: list[RoundtableMessage],
+    root_dir: Path,
+) -> RoundtableMessage:
+    round_number = int(state["round"])
+    previous_message = messages[-1] if messages else None
+    retrieval_query = _retrieval_query(persona, state["topic"], messages)
+    rag_chunks = []
+    corpus_id = _rag_expert_name(persona)
+    if corpus_id:
+        rag_chunks = get_retriever(
+            corpus_id,
+            top_k=5,
+            knowledge_scope=persona.knowledge_scope or "experts",
+            root_dir=root_dir,
+        ).invoke(retrieval_query)
+    retrieved_context = (
+        format_retrieved_context(rag_chunks) if rag_chunks else "暂无可用参考资料。"
+    )
+    prompt = build_agent_prompt(
+        topic=state["topic"],
+        round_number=round_number,
+        max_rounds=int(state["max_rounds"]),
+        persona=persona,
+        previous_message=previous_message,
+        messages=messages,
+        retrieved_context=retrieved_context,
+    )
+    references = _unique_sources(source_files(rag_chunks))
+    reference_details = format_reference_details(rag_chunks)
+    content = _with_reference_footer(llm.generate(prompt), references)
+    llm_info = describe_llm(llm)
+    return {
+        "round": round_number,
+        "speaker": persona.name,
+        "speaker_id": persona.id,
+        "role": persona.role,
+        "type": "agent",
+        "content": content,
+        "references": references,
+        "reference_details": reference_details,
+        "epistemic_tags": classify_epistemic_tags(
+            persona,
+            references=references,
+            rag_configured=bool(corpus_id),
+        ),
+        "llm_provider": llm_info["provider"],
+        "llm_model": llm_info["model"],
+    }
 
 
 def create_moderator_question_node(
@@ -114,6 +179,58 @@ def create_moderator_question_node(
     return moderator_question
 
 
+def create_agent_round_node(
+    personas: list[Persona],
+    agent_llms: dict[str, LLMClient],
+    default_llm: LLMClient,
+    *,
+    root_dir: Path,
+    progress_callback: ProgressCallback | None = None,
+) -> Node:
+    def agent_round(state: RoundtableState) -> dict:
+        messages = _messages(state)
+        round_number = int(state["round"])
+        speaking_order = rotate_personas(personas, round_number)
+        last_speaker = state.get("current_speaker", "")
+
+        for persona in speaking_order:
+            label = f"Round {round_number}: {persona.name} speaking"
+            _emit_progress(
+                progress_callback,
+                event="start",
+                stage="agent",
+                label=label,
+                round=round_number,
+                speaker=persona.name,
+                speaker_id=persona.id,
+            )
+            message = execute_agent_turn(
+                persona,
+                agent_llms.get(persona.id, default_llm),
+                state=state,
+                messages=messages,
+                root_dir=root_dir,
+            )
+            messages = messages + [message]
+            last_speaker = persona.id
+            _emit_progress(
+                progress_callback,
+                event="done",
+                stage="agent",
+                label=label,
+                round=round_number,
+                speaker=persona.name,
+                speaker_id=persona.id,
+            )
+
+        return {
+            "current_speaker": last_speaker,
+            "messages": messages,
+        }
+
+    return agent_round
+
+
 def create_agent_node(
     persona: Persona,
     llm: LLMClient,
@@ -134,44 +251,7 @@ def create_agent_node(
             speaker=persona.name,
             speaker_id=persona.id,
         )
-        previous_message = messages[-1] if messages else None
-        retrieval_query = _recent_messages_query(state["topic"], messages)
-        rag_chunks = []
-        expert_name = _rag_expert_name(persona, root_dir)
-        if expert_name:
-            rag_chunks = get_retriever(
-                expert_name,
-                top_k=5,
-                root_dir=root_dir,
-            ).invoke(retrieval_query)
-        retrieved_context = (
-            format_retrieved_context(rag_chunks)
-            if rag_chunks
-            else "暂无可用参考资料。"
-        )
-        prompt = build_agent_prompt(
-            topic=state["topic"],
-            round_number=round_number,
-            max_rounds=int(state["max_rounds"]),
-            persona=persona,
-            previous_message=previous_message,
-            messages=messages,
-            retrieved_context=retrieved_context,
-        )
-        references = _unique_sources(source_files(rag_chunks))
-        content = _with_reference_footer(llm.generate(prompt), references)
-        llm_info = describe_llm(llm)
-        message: RoundtableMessage = {
-            "round": round_number,
-            "speaker": persona.name,
-            "speaker_id": persona.id,
-            "role": persona.role,
-            "type": "agent",
-            "content": content,
-            "references": references,
-            "llm_provider": llm_info["provider"],
-            "llm_model": llm_info["model"],
-        }
+        message = execute_agent_turn(persona, llm, state=state, messages=messages, root_dir=root_dir)
         _emit_progress(
             progress_callback,
             event="done",

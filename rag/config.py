@@ -5,11 +5,31 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 120
 KNOWLEDGE_DIR = Path("knowledge")
+EXPERTS_SUBDIR = "experts"
+PEOPLE_SUBDIR = "people"
+PERSON_SOURCE_KINDS = frozenset({"book", "x", "news", "report"})
+SOURCE_KIND_WEIGHTS: dict[str, float] = {
+    "book": 4.0,
+    "report": 3.0,
+    "x": 2.0,
+    "news": 1.0,
+}
+EXPERT_WORK_TYPE_FOLDERS: dict[str, str] = {
+    "papers": "paper",
+    "paper": "paper",
+    "letters": "letter",
+    "letter": "letter",
+    "reports": "report",
+    "report": "report",
+}
+DEFAULT_EXPERT_WORK_TYPE = "book"
+KnowledgeScope = Literal["experts", "people"]
 VECTOR_DB_DIR = Path("vector_db") / "chroma"
 KEYWORD_INDEX_FILE = "chunks.jsonl"
 CHROMA_COLLECTION_NAME = "rag_chunks"
@@ -21,16 +41,86 @@ TOKEN_RE = re.compile(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]")
 
 
 @dataclass(frozen=True)
+class CorpusRef:
+    corpus_id: str
+    knowledge_scope: KnowledgeScope
+
+    @property
+    def vector_key(self) -> str:
+        return corpus_vector_key(self.knowledge_scope, self.corpus_id)
+
+    @property
+    def knowledge_dir(self) -> Path:
+        return corpus_knowledge_dir(self.knowledge_scope, self.corpus_id)
+
+
+@dataclass(frozen=True)
 class RagPaths:
     root_dir: Path
     knowledge_dir: Path
     vector_db_dir: Path
 
+    def corpus_knowledge_dir(self, corpus: CorpusRef) -> Path:
+        return self.knowledge_dir / corpus.knowledge_scope / corpus.corpus_id
+
+    def corpus_vector_dir(self, corpus: CorpusRef) -> Path:
+        return self.vector_db_dir / corpus.vector_key
+
     def expert_knowledge_dir(self, expert_name: str) -> Path:
-        return self.knowledge_dir / expert_name
+        return corpus_knowledge_dir("experts", expert_name, root_dir=self.root_dir)
 
     def expert_vector_dir(self, expert_name: str) -> Path:
-        return self.vector_db_dir / expert_name
+        return self.vector_db_dir / corpus_vector_key("experts", expert_name)
+
+    def person_knowledge_dir(self, person_id: str) -> Path:
+        return corpus_knowledge_dir("people", person_id, root_dir=self.root_dir)
+
+    def person_vector_dir(self, person_id: str) -> Path:
+        return self.vector_db_dir / corpus_vector_key("people", person_id)
+
+
+def corpus_knowledge_dir(
+    knowledge_scope: KnowledgeScope,
+    corpus_id: str,
+    *,
+    root_dir: Path | str = ".",
+) -> Path:
+    root = Path(root_dir).expanduser().resolve()
+    return root / KNOWLEDGE_DIR / knowledge_scope / corpus_id
+
+
+def corpus_vector_key(knowledge_scope: KnowledgeScope, corpus_id: str) -> str:
+    return f"{knowledge_scope}__{corpus_id}"
+
+
+def resolve_corpus(
+    corpus_id: str,
+    *,
+    knowledge_scope: KnowledgeScope | None = None,
+    agent_type: str | None = None,
+) -> CorpusRef:
+    if knowledge_scope is None:
+        if agent_type == "domain_expert":
+            knowledge_scope = "experts"
+        elif agent_type == "persona_inspired":
+            knowledge_scope = "people"
+        else:
+            knowledge_scope = "experts"
+    return CorpusRef(corpus_id=corpus_id, knowledge_scope=knowledge_scope)
+
+
+def infer_knowledge_scope(
+    *,
+    agent_type: str | None,
+    explicit_scope: str | None = None,
+) -> KnowledgeScope | None:
+    if explicit_scope in {"experts", "people"}:
+        return explicit_scope  # type: ignore[return-value]
+    if agent_type == "domain_expert":
+        return "experts"
+    if agent_type == "persona_inspired":
+        return "people"
+    return None
 
 
 def resolve_paths(root_dir: Path | str = ".") -> RagPaths:
@@ -40,6 +130,19 @@ def resolve_paths(root_dir: Path | str = ".") -> RagPaths:
         knowledge_dir=root / KNOWLEDGE_DIR,
         vector_db_dir=root / VECTOR_DB_DIR,
     )
+
+
+def discover_corpora(root_dir: Path | str = ".") -> list[CorpusRef]:
+    paths = resolve_paths(root_dir)
+    corpora: list[CorpusRef] = []
+    for scope in ("experts", "people"):
+        scope_dir = paths.knowledge_dir / scope
+        if not scope_dir.exists():
+            continue
+        for path in sorted(scope_dir.iterdir()):
+            if path.is_dir():
+                corpora.append(CorpusRef(corpus_id=path.name, knowledge_scope=scope))  # type: ignore[arg-type]
+    return corpora
 
 
 def tokenize(text: str) -> list[str]:
