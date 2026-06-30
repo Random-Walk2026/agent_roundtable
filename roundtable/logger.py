@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 
-from src.state import RoundtableState
+from roundtable.state import RoundtableState
 
 
 FILENAME_SAFE_RE = re.compile(r"[^\w\u4e00-\u9fff-]+", re.UNICODE)

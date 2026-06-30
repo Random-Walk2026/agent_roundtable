@@ -5,8 +5,21 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_AGENT_LLM_CONFIG_PATH = Path("configs") / "agent_llms.json"
-ALLOWED_LLM_CONFIG_KEYS = {"provider", "model", "api_key_env", "base_url", "timeout"}
+DEFAULT_AGENT_LLM_CONFIG_PATH = Path("config") / "agent_llms.json"
+ALLOWED_LLM_CONFIG_KEYS = {
+    "provider_chain",
+    "workflow",
+    "fallback_model",
+    "temperature",
+    "max_output_tokens",
+    "skip",
+    "label",
+    "provider",
+    "model",
+    "api_key_env",
+    "base_url",
+    "timeout",
+}
 DEFAULT_DESCRIPTION = (
     "Committed per-agent LLM routing. Store real API keys in .env; "
     "this file only names provider, model, and api_key_env."
@@ -33,11 +46,24 @@ def _sanitize_agent_configs(agents: dict[str, Any], path: Path) -> dict[str, dic
         if unknown_keys:
             keys = ", ".join(sorted(unknown_keys))
             raise ValueError(f"Unsupported LLM config keys for '{agent_id}': {keys}")
-        configs[agent_id] = {
-            key: value
-            for key, value in config.items()
-            if value is not None and value != ""
-        }
+        sanitized: dict[str, Any] = {}
+        for key, value in config.items():
+            if value is None or value == "":
+                continue
+            if key in {"temperature"}:
+                sanitized[key] = float(value)
+            elif key in {"timeout", "max_output_tokens"}:
+                sanitized[key] = int(value)
+            elif key == "skip":
+                if isinstance(value, str):
+                    sanitized[key] = [item.strip() for item in value.split(",") if item.strip()]
+                elif isinstance(value, list):
+                    sanitized[key] = [str(item).strip() for item in value if str(item).strip()]
+                else:
+                    raise ValueError(f"skip must be a string or list for '{agent_id}': {path}")
+            else:
+                sanitized[key] = value
+        configs[agent_id] = sanitized
     return configs
 
 

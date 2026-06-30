@@ -15,26 +15,56 @@ except ImportError:  # pragma: no cover - dependency is declared for normal use.
     dotenv_values = None
 
 
-PROVIDER_MODEL_ENV = {
+CATALOG_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "model_catalog.json"
+
+# Built-in defaults, used when config/model_catalog.json is missing or invalid.
+_DEFAULT_PROVIDER_MODEL_ENV = {
     "gemini": "GEMINI_MODEL",
     "openai": "OPENAI_MODEL",
     "openrouter": "OPENROUTER_MODEL",
     "deepseek": "DEEPSEEK_MODEL",
 }
 
-PROVIDER_KEY_PREFIXES = {
+_DEFAULT_PROVIDER_KEY_PREFIXES = {
     "gemini": ["GEMINI_API_KEY"],
     "openai": ["OPENAI_API_KEY"],
     "openrouter": ["OPENROUTER_API_KEY"],
     "deepseek": ["DEEPSEEK_API_KEY"],
 }
 
-DEEPSEEK_OFFICIAL_MODELS = [
+_DEFAULT_DEEPSEEK_OFFICIAL_MODELS = [
     "deepseek-v4-flash",
     "deepseek-v4-pro",
     "deepseek-chat",
     "deepseek-reasoner",
 ]
+
+
+def _load_catalog_config(path: Path = CATALOG_CONFIG_PATH):
+    """Load provider catalog data, falling back to built-in defaults."""
+    model_env = dict(_DEFAULT_PROVIDER_MODEL_ENV)
+    key_prefixes = {k: list(v) for k, v in _DEFAULT_PROVIDER_KEY_PREFIXES.items()}
+    deepseek_models = list(_DEFAULT_DEEPSEEK_OFFICIAL_MODELS)
+
+    try:
+        providers = json.loads(path.read_text(encoding="utf-8")).get("providers", {})
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return model_env, key_prefixes, deepseek_models
+
+    if isinstance(providers, dict):
+        for name, cfg in providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            if cfg.get("model_env"):
+                model_env[name] = str(cfg["model_env"])
+            if isinstance(cfg.get("key_prefixes"), list):
+                key_prefixes[name] = [str(item) for item in cfg["key_prefixes"]]
+            if name == "deepseek" and isinstance(cfg.get("official_models"), list):
+                deepseek_models = [str(item) for item in cfg["official_models"]]
+    return model_env, key_prefixes, deepseek_models
+
+
+PROVIDER_MODEL_ENV, PROVIDER_KEY_PREFIXES, DEEPSEEK_OFFICIAL_MODELS = _load_catalog_config()
 
 
 @dataclass(frozen=True)

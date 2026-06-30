@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 
-from src.graph import run_roundtable
-from src.llm import create_llm
+from roundtable.graph import run_roundtable
+from llm import CLI_BACKENDS, create_llm, create_llm_from_config
 
 
 def parse_args() -> argparse.Namespace:
@@ -14,16 +14,33 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--provider",
         default="auto",
-        choices=["auto", "mock", "gemini", "openai", "openrouter", "deepseek"],
+        choices=[
+            "auto",
+            "mock",
+            "gemini",
+            "openai",
+            "openrouter",
+            "deepseek",
+            "claude",
+            "codex",
+            "grok",
+            "antigravity",
+            "copilot",
+        ],
         help="LLM provider. auto uses persona/council config or falls back to mock.",
     )
     parser.add_argument("--model", default=None, help="Provider model override")
+    parser.add_argument(
+        "--provider-chain",
+        default=None,
+        help="Workflow-style fallback chain, for example 'claude:sonnet@high, gemini:gemini-2.5-flash'.",
+    )
     parser.add_argument("--mock", action="store_true", help="Force deterministic mock LLM")
     parser.add_argument("--output-dir", default="logs", help="Markdown log output directory")
     parser.add_argument(
         "--agent-llm-config",
         default=None,
-        help="JSON file for per-agent LLM config. Defaults to configs/agent_llms.json.",
+        help="JSON file for per-agent LLM config. Defaults to config/agent_llms.json.",
     )
     return parser.parse_args()
 
@@ -32,6 +49,11 @@ def main() -> None:
     args = parse_args()
     if args.mock:
         llm = create_llm(provider="mock", model=args.model)
+    elif args.provider_chain:
+        llm = create_llm_from_config({"provider_chain": args.provider_chain})
+    elif args.provider in CLI_BACKENDS:
+        provider_chain = f"{args.provider}:{args.model}" if args.model else args.provider
+        llm = create_llm_from_config({"provider_chain": provider_chain})
     elif args.provider == "auto":
         llm = None
     else:

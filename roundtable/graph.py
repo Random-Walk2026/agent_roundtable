@@ -5,18 +5,18 @@ from typing import Literal
 
 from langgraph.graph import END, START, StateGraph
 
-from src.agent_llm_config import load_agent_llm_configs
-from src.agents import (
+from roundtable.agent_llm_config import load_agent_llm_configs
+from roundtable.agents import (
     ProgressCallback,
     create_agent_node,
     create_final_summary_node,
     create_moderator_question_node,
     create_round_summary_node,
 )
-from src.llm import LLMClient, create_llm, create_llm_from_config
-from src.loader import PROJECT_ROOT, load_council_personas
-from src.logger import save_markdown_log
-from src.state import Council, Persona, RoundtableState
+from llm import LLMClient, create_llm, create_llm_from_config
+from roundtable.loader import PROJECT_ROOT, load_council_personas
+from roundtable.logger import save_markdown_log
+from roundtable.state import Council, Persona, RoundtableState
 
 
 def build_roundtable_graph(
@@ -80,6 +80,8 @@ def run_roundtable(
     output_dir: Path | str = "logs",
     agent_llm_config_path: Path | str | None = None,
     progress_callback: ProgressCallback | None = None,
+    initial_messages: list[dict] | None = None,
+    initial_round_summaries: list[str] | None = None,
 ) -> RoundtableState:
     if not topic.strip():
         raise ValueError("topic must not be empty")
@@ -110,16 +112,25 @@ def run_roundtable(
         agent_llms=agent_llms,
         progress_callback=progress_callback,
     )
+    seed_messages = list(initial_messages or [])
+    seed_round_summaries = list(initial_round_summaries or [])
+    seed_rounds = [
+        int(message.get("round", 0))
+        for message in seed_messages
+        if isinstance(message.get("round", 0), int | str)
+    ]
+    start_round = max(seed_rounds or [len(seed_round_summaries), 0])
+    max_rounds = start_round + rounds
     initial_state: RoundtableState = {
         "topic": topic,
-        "round": 0,
-        "max_rounds": rounds,
+        "round": start_round,
+        "max_rounds": max_rounds,
         "council_name": council.name,
         "council_description": council.description,
         "current_speaker": "",
         "personas": [persona.to_dict() for persona in personas],
-        "messages": [],
-        "round_summaries": [],
+        "messages": seed_messages,
+        "round_summaries": seed_round_summaries,
         "final_summary": "",
     }
     result: RoundtableState = app.invoke(initial_state)

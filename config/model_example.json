@@ -1,0 +1,79 @@
+{
+  "_README": "Model quick-reference. This file is not loaded by the runtime; copy full provider chains into config/agent_llms.json or the UI. Syntax: provider:model@effort. @effort is only used by CLI providers: claude, codex, grok, antigravity, copilot.",
+  "gemini": {
+    "_说明": "Direct Gemini API. Reads GEMINI_API_KEY_1...N or GEMINI_API_KEY from .env.",
+    "文本可用": [
+      "gemini:gemini-3.5-flash",
+      "gemini:gemini-3.1-pro-preview",
+      "gemini:gemini-2.5-pro",
+      "gemini:gemini-2.5-flash",
+      "gemini:gemini-2.5-flash-lite"
+    ]
+  },
+  "claude": {
+    "_说明": "Local Claude CLI subscription. Effort: low, medium, high, xhigh, max.",
+    "可用": [
+      "claude:sonnet@high",
+      "claude:sonnet@medium",
+      "claude:opus@high",
+      "claude:haiku@medium",
+      "claude@high"
+    ]
+  },
+  "codex": {
+    "_说明": "Local Codex CLI subscription. Model is passed to codex -m. Effort: low, medium, high, xhigh.",
+    "可用": [
+      "codex@medium",
+      "codex@high",
+      "codex:gpt-5.5@medium",
+      "codex:gpt-5.5@high"
+    ]
+  },
+  "antigravity": {
+    "_说明": "CLIProxyAPI HTTP. Use model IDs exposed by the local /v1/models endpoint.",
+    "可用": [
+      "antigravity:gemini-3.5-flash-low",
+      "antigravity:gemini-3.5-flash-extra-low",
+      "antigravity:gemini-3.1-pro-low",
+      "antigravity:claude-sonnet-4-6",
+      "antigravity:claude-opus-4-6-thinking",
+      "antigravity:gpt-oss-120b-medium"
+    ]
+  },
+  "grok": {
+    "_说明": "CLIProxyAPI HTTP for xAI/Grok account. Effort can be inline with @medium/@high when the proxy supports it.",
+    "可用": [
+      "grok:grok-4.3",
+      "grok:grok-build-0.1@medium",
+      "grok:grok-3-mini"
+    ]
+  },
+  "copilot": {
+    "_说明": "CLIProxyAPI HTTP for GitHub Copilot account.",
+    "可用": [
+      "copilot@high",
+      "copilot@medium"
+    ]
+  },
+  "deepseek": {
+    "_说明": "Direct DeepSeek OpenAI-compatible API. Reads DEEPSEEK_API_KEY from .env.",
+    "可用": [
+      "deepseek:deepseek-v4-flash",
+      "deepseek:deepseek-v4-pro"
+    ]
+  },
+  "openrouter": {
+    "_说明": "Direct OpenRouter OpenAI-compatible API. Reads OPENROUTER_API_KEY_1...N or OPENROUTER_API_KEY from .env.",
+    "免费模型": [
+      "openrouter:openai/gpt-oss-120b:free",
+      "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+      "openrouter:nvidia/nemotron-3-super-120b-a12b:free",
+      "openrouter:poolside/laguna-m.1:free"
+    ]
+  },
+  "_整段降级链示例": {
+    "balanced": "antigravity:gemini-3.1-pro-low, gemini:gemini-2.5-flash, claude:sonnet@high, openrouter:nvidia/nemotron-3-super-120b-a12b:free",
+    "deep_reasoning": "claude:sonnet@high, codex:gpt-5.5@high, gemini:gemini-2.5-pro, deepseek:deepseek-v4-pro",
+    "fast_cheap": "antigravity:gemini-3.5-flash-low, gemini:gemini-2.5-flash-lite, openrouter:openai/gpt-oss-120b:free"
+  }
+}

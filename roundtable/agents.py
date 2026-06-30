@@ -4,14 +4,14 @@ from collections.abc import Callable
 from pathlib import Path
 
 from rag.retriever import format_retrieved_context, get_retriever, source_files
-from src.llm import LLMClient, describe_llm
-from src.prompts import (
+from llm import LLMClient, describe_llm
+from roundtable.prompts import (
     build_agent_prompt,
     build_final_summary_prompt,
     build_moderator_question_prompt,
     build_round_summary_prompt,
 )
-from src.state import Persona, RoundtableMessage, RoundtableState
+from roundtable.state import Persona, RoundtableMessage, RoundtableState
 
 
 Node = Callable[[RoundtableState], dict]
@@ -87,7 +87,6 @@ def create_moderator_question_node(
             messages=_messages(state),
         )
         content = llm.generate(prompt)
-        llm_info = describe_llm(llm)
         message: RoundtableMessage = {
             "round": round_number,
             "speaker": "Moderator",
@@ -95,8 +94,8 @@ def create_moderator_question_node(
             "role": "主持人",
             "type": "question",
             "content": content,
-            "llm_provider": llm_info["provider"],
-            "llm_model": llm_info["model"],
+            "llm_provider": describe_llm(llm)["provider"],
+            "llm_model": describe_llm(llm)["model"],
         }
         _emit_progress(
             progress_callback,
@@ -159,9 +158,9 @@ def create_agent_node(
             messages=messages,
             retrieved_context=retrieved_context,
         )
-        llm_info = describe_llm(llm)
         references = _unique_sources(source_files(rag_chunks))
         content = _with_reference_footer(llm.generate(prompt), references)
+        llm_info = describe_llm(llm)
         message: RoundtableMessage = {
             "round": round_number,
             "speaker": persona.name,

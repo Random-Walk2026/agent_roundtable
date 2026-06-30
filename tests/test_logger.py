@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from src.logger import save_markdown_log
-from src.state import RoundtableState
+from roundtable.logger import save_markdown_log
+from roundtable.state import RoundtableState
 
 
 def test_markdown_log_uses_topic_filename_in_flat_output_dir(tmp_path: Path):

@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from src.state import Council, Persona
+from roundtable.state import Council, Persona
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -37,8 +37,8 @@ def _find_config(base_dir: Path, name: str) -> Path:
 
 def _find_persona_config(root: Path, persona_id: str) -> Path:
     search_dirs = [
-        root / "agents" / "domain_experts",
-        root / "agents" / "persona_inspired",
+        root / "config" / "domain_experts",
+        root / "config" / "persona_inspired",
     ]
     for base_dir in search_dirs:
         try:
@@ -84,7 +84,7 @@ def load_persona(persona_id: str, root_dir: Path | str | None = None) -> Persona
 
 def load_council(council_name: str, root_dir: Path | str | None = None) -> Council:
     root = Path(root_dir) if root_dir else PROJECT_ROOT
-    data = _load_structured_file(_find_config(root / "councils", council_name))
+    data = _load_structured_file(_find_config(root / "config" / "councils", council_name))
     members = data.get("members", [])
     if not isinstance(members, list) or not members:
         raise ValueError(f"Council '{council_name}' must define at least one member")

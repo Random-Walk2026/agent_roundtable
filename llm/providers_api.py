@@ -7,7 +7,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 try:
     from dotenv import load_dotenv
@@ -89,7 +89,7 @@ def _load_environment() -> None:
         load_dotenv()
 
 
-def _collect_numbered_keys(prefix: str) -> list[str]:
+def collect_numbered_keys(prefix: str) -> list[str]:
     direct_key = os.getenv(prefix)
     numbered: list[tuple[int, str]] = []
     pattern = re.compile(rf"^{re.escape(prefix)}_(\d+)$")
@@ -122,7 +122,7 @@ def _default_numbered_api_key_env(prefix: str) -> str:
 
 @dataclass
 class GeminiLLM:
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-2.5-flash"
     api_keys: list[str] | None = None
     models: list[str] | None = None
     temperature: float = 0.7
@@ -133,7 +133,7 @@ class GeminiLLM:
     def __post_init__(self) -> None:
         _load_environment()
         if self.api_keys is None:
-            self.api_keys = _collect_numbered_keys("GEMINI_API_KEY")
+            self.api_keys = collect_numbered_keys("GEMINI_API_KEY")
         if not self.api_keys:
             raise LLMConfigurationError(
                 "Gemini provider selected but no GEMINI_API_KEY or GEMINI_API_KEY_N was found."
@@ -200,6 +200,7 @@ class OpenAILLM:
     api_key: str | None = None
     api_key_env: str = "OPENAI_API_KEY"
     timeout: int = 60
+    temperature: float = 0.7
     provider_name: str = "openai"
 
     def __post_init__(self) -> None:
@@ -217,7 +218,7 @@ class OpenAILLM:
         response = client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
+            temperature=self.temperature,
         )
         return response.choices[0].message.content or ""
 
@@ -229,6 +230,7 @@ class OpenRouterLLM:
     api_key_env: str = "OPENROUTER_API_KEY_1"
     models: list[str] | None = None
     timeout: int = 60
+    temperature: float = 0.7
     provider_name: str = "openrouter"
 
     def __post_init__(self) -> None:
@@ -262,7 +264,7 @@ class OpenRouterLLM:
                 response = client.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.7,
+                    temperature=self.temperature,
                 )
                 return response.choices[0].message.content or ""
             except Exception as exc:
@@ -278,6 +280,7 @@ class DeepSeekLLM:
     api_key_env: str = "DEEPSEEK_API_KEY"
     base_url: str = "https://api.deepseek.com"
     timeout: int = 60
+    temperature: float = 0.7
     provider_name: str = "deepseek"
 
     def __post_init__(self) -> None:
@@ -295,7 +298,7 @@ class DeepSeekLLM:
         response = client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
+            temperature=self.temperature,
         )
         return response.choices[0].message.content or ""
 
@@ -321,29 +324,33 @@ def create_llm(
     api_key_env: str | None = None,
     base_url: str | None = None,
     timeout: int | None = None,
+    temperature: float | None = None,
+    max_output_tokens: int | None = None,
 ) -> LLMClient:
     _load_environment()
     selected = provider.lower()
+    temp = 0.7 if temperature is None else temperature
     if selected == "mock":
         return MockLLM(model=model or "mock")
     if selected == "auto":
-        if _collect_numbered_keys("GEMINI_API_KEY"):
+        if collect_numbered_keys("GEMINI_API_KEY"):
             selected = "gemini"
         elif os.getenv("OPENAI_API_KEY"):
             selected = "openai"
-        elif _collect_numbered_keys("OPENROUTER_API_KEY"):
+        elif collect_numbered_keys("OPENROUTER_API_KEY"):
             selected = "openrouter"
         else:
             return MockLLM()
 
     if selected == "gemini":
         gemini_model = model or os.getenv("GEMINI_MODEL") or os.getenv("GEMINI_MODEL_NAME")
-        max_output_tokens = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "4096"))
         gemini_api_keys = [_configured_api_key(api_key_env)] if api_key_env else None
         return GeminiLLM(
-            model=gemini_model or "gemini-2.0-flash",
+            model=gemini_model or "gemini-2.5-flash",
             api_keys=[key for key in gemini_api_keys if key] if gemini_api_keys else None,
-            max_output_tokens=max_output_tokens,
+            temperature=temp,
+            max_output_tokens=max_output_tokens
+            or int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "4096")),
             timeout=timeout or int(os.getenv("GEMINI_TIMEOUT", "60")),
         )
     if selected == "openai":
@@ -351,12 +358,14 @@ def create_llm(
             model=model or os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             api_key_env=api_key_env or "OPENAI_API_KEY",
             timeout=timeout or int(os.getenv("OPENAI_TIMEOUT", "60")),
+            temperature=temp,
         )
     if selected == "openrouter":
         return OpenRouterLLM(
             model=model or os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
             api_key_env=api_key_env or _default_numbered_api_key_env("OPENROUTER_API_KEY"),
             timeout=timeout or int(os.getenv("OPENROUTER_TIMEOUT", "60")),
+            temperature=temp,
         )
     if selected == "deepseek":
         return DeepSeekLLM(
@@ -364,27 +373,6 @@ def create_llm(
             api_key_env=api_key_env or "DEEPSEEK_API_KEY",
             base_url=base_url or os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
             timeout=timeout or int(os.getenv("DEEPSEEK_TIMEOUT", "60")),
+            temperature=temp,
         )
     raise ValueError(f"Unsupported provider: {provider}")
-
-
-def create_llm_from_config(config: dict[str, Any] | None, fallback: LLMClient | None = None) -> LLMClient:
-    if not config:
-        if fallback is not None:
-            return fallback
-        return create_llm("auto")
-
-    provider = str(config.get("provider", "auto"))
-    if provider == "inherit":
-        if fallback is None:
-            return create_llm("auto")
-        return fallback
-
-    timeout = config.get("timeout")
-    return create_llm(
-        provider=provider,
-        model=config.get("model"),
-        api_key_env=config.get("api_key_env"),
-        base_url=config.get("base_url"),
-        timeout=int(timeout) if timeout is not None else None,
-    )

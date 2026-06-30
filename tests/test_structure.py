@@ -42,7 +42,7 @@ def test_knowledge_contains_only_book_level_expert_corpora():
 
 
 def test_councils_are_limited_to_experts_and_persona_inspired_modes():
-    councils_dir = PROJECT_ROOT / "councils"
+    councils_dir = PROJECT_ROOT / "config" / "councils"
     council_files = {path.stem for path in councils_dir.glob("*.yaml")}
 
     assert council_files == {"experts", "persona_inspired"}
@@ -62,7 +62,7 @@ def test_councils_are_limited_to_experts_and_persona_inspired_modes():
 
 
 def test_domain_experts_use_matching_book_corpora():
-    agents_dir = PROJECT_ROOT / "agents" / "domain_experts"
+    agents_dir = PROJECT_ROOT / "config" / "domain_experts"
     agent_files = {path.stem for path in agents_dir.glob("*.yaml")}
 
     assert agent_files == EXPECTED_EXPERT_IDS
@@ -75,7 +75,7 @@ def test_domain_experts_use_matching_book_corpora():
 
 
 def test_persona_inspired_agents_are_style_only_until_their_books_exist():
-    agents_dir = PROJECT_ROOT / "agents" / "persona_inspired"
+    agents_dir = PROJECT_ROOT / "config" / "persona_inspired"
     agent_files = {path.stem for path in agents_dir.glob("*.yaml")}
 
     assert agent_files == EXPECTED_PERSONA_IDS

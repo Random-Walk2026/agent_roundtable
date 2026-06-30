@@ -3,9 +3,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.graph import run_roundtable
-from src.loader import load_persona
-from src.llm import MockLLM, OpenRouterLLM, create_llm
+from roundtable.graph import run_roundtable
+from roundtable.loader import load_persona
+from llm import MockLLM, OpenRouterLLM, create_llm
 
 
 def test_graph_runs_two_rounds_and_generates_final_summary(tmp_path: Path):
@@ -49,9 +49,9 @@ def test_openrouter_llm_uses_numbered_api_key_by_default(monkeypatch):
 
 
 def test_persona_llm_config_is_logged_per_agent(tmp_path: Path):
-    (tmp_path / "agents" / "domain_experts").mkdir(parents=True)
-    (tmp_path / "councils").mkdir()
-    (tmp_path / "agents" / "domain_experts" / "analyst.yaml").write_text(
+    (tmp_path / "config" / "domain_experts").mkdir(parents=True)
+    (tmp_path / "config" / "councils").mkdir()
+    (tmp_path / "config" / "domain_experts" / "analyst.yaml").write_text(
         yaml.safe_dump(
             {
                 "name": "Test Analyst",
@@ -67,7 +67,7 @@ def test_persona_llm_config_is_logged_per_agent(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    (tmp_path / "councils" / "test.yaml").write_text(
+    (tmp_path / "config" / "councils" / "test.yaml").write_text(
         yaml.safe_dump(
             {
                 "name": "test",
@@ -97,10 +97,9 @@ def test_persona_llm_config_is_logged_per_agent(tmp_path: Path):
 
 
 def test_agent_llm_json_overrides_agent_yaml_config(tmp_path: Path):
-    (tmp_path / "agents" / "domain_experts").mkdir(parents=True)
-    (tmp_path / "councils").mkdir()
-    (tmp_path / "configs").mkdir()
-    (tmp_path / "agents" / "domain_experts" / "analyst.yaml").write_text(
+    (tmp_path / "config" / "domain_experts").mkdir(parents=True)
+    (tmp_path / "config" / "councils").mkdir()
+    (tmp_path / "config" / "domain_experts" / "analyst.yaml").write_text(
         yaml.safe_dump(
             {
                 "name": "Test Analyst",
@@ -116,7 +115,7 @@ def test_agent_llm_json_overrides_agent_yaml_config(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    (tmp_path / "councils" / "test.yaml").write_text(
+    (tmp_path / "config" / "councils" / "test.yaml").write_text(
         yaml.safe_dump(
             {
                 "name": "test",
@@ -128,7 +127,7 @@ def test_agent_llm_json_overrides_agent_yaml_config(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    (tmp_path / "configs" / "agent_llms.json").write_text(
+    (tmp_path / "config" / "agent_llms.json").write_text(
         """{
   "agents": {
     "analyst": {
@@ -156,9 +155,9 @@ def test_agent_llm_json_overrides_agent_yaml_config(tmp_path: Path):
 
 
 def test_roundtable_emits_progress_events(tmp_path: Path):
-    (tmp_path / "agents" / "domain_experts").mkdir(parents=True)
-    (tmp_path / "councils").mkdir()
-    (tmp_path / "agents" / "domain_experts" / "analyst.yaml").write_text(
+    (tmp_path / "config" / "domain_experts").mkdir(parents=True)
+    (tmp_path / "config" / "councils").mkdir()
+    (tmp_path / "config" / "domain_experts" / "analyst.yaml").write_text(
         yaml.safe_dump(
             {
                 "name": "Test Analyst",
@@ -173,7 +172,7 @@ def test_roundtable_emits_progress_events(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    (tmp_path / "councils" / "test.yaml").write_text(
+    (tmp_path / "config" / "councils" / "test.yaml").write_text(
         yaml.safe_dump(
             {
                 "name": "test",
@@ -235,8 +234,8 @@ class CapturingLLM(MockLLM):
 
 
 def test_agent_uses_rag_retrieved_context_before_speaking(tmp_path: Path):
-    (tmp_path / "agents" / "domain_experts").mkdir(parents=True)
-    (tmp_path / "councils").mkdir()
+    (tmp_path / "config" / "domain_experts").mkdir(parents=True)
+    (tmp_path / "config" / "councils").mkdir()
     (tmp_path / "knowledge" / "macro_economist" / "keynes").mkdir(parents=True)
     (tmp_path / "knowledge" / "macro_economist" / "keynes" / "demand.md").write_text(
         "# Keynesian Demand\n\n"
@@ -244,7 +243,7 @@ def test_agent_uses_rag_retrieved_context_before_speaking(tmp_path: Path):
         "Aggregate demand and employment can be supported by countercyclical fiscal policy.",
         encoding="utf-8",
     )
-    (tmp_path / "agents" / "domain_experts" / "macro_economist.yaml").write_text(
+    (tmp_path / "config" / "domain_experts" / "macro_economist.yaml").write_text(
         yaml.safe_dump(
             {
                 "name": "Macro Economist",
@@ -260,7 +259,7 @@ def test_agent_uses_rag_retrieved_context_before_speaking(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    (tmp_path / "councils" / "macro.yaml").write_text(
+    (tmp_path / "config" / "councils" / "macro.yaml").write_text(
         yaml.safe_dump(
             {
                 "name": "macro",

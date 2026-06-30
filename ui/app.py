@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -11,30 +12,24 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.agent_llm_config import (  # noqa: E402
+from roundtable.agent_llm_config import (  # noqa: E402
     DEFAULT_DESCRIPTION,
     load_agent_llm_config_document,
     save_agent_llm_config_document,
 )
-from src.graph import run_roundtable  # noqa: E402
-from src.llm import MockLLM  # noqa: E402
-from src.loader import load_council_personas  # noqa: E402
-from src.model_catalog import (  # noqa: E402
-    ModelCatalogResult,
+from roundtable.graph import run_roundtable  # noqa: E402
+from llm import (  # noqa: E402
+    API_PROVIDERS,
+    CLI_BACKENDS,
+    CLI_EFFORT_CHOICES,
+    MockLLM,
+)
+from llm.catalog import (  # noqa: E402
     fallback_model_options,
     fetch_model_options,
     list_api_key_env_names,
 )
-
-
-PROVIDERS = ["openrouter", "gemini", "openai", "deepseek"]
-DEFAULT_KEY_ENV = {
-    "openrouter": "OPENROUTER_API_KEY_1",
-    "gemini": "GEMINI_API_KEY_1",
-    "openai": "OPENAI_API_KEY",
-    "deepseek": "DEEPSEEK_API_KEY",
-}
-
+from roundtable.loader import load_council_personas  # noqa: E402
 
 st.set_page_config(
     page_title="Agent Roundtable",
@@ -67,7 +62,7 @@ st.markdown(
 
 
 def _council_names() -> list[str]:
-    names = sorted(path.stem for path in (PROJECT_ROOT / "councils").glob("*.yaml"))
+    names = sorted(path.stem for path in (PROJECT_ROOT / "config" / "councils").glob("*.yaml"))
     return names or ["experts"]
 
 
@@ -77,53 +72,96 @@ def _select_index(options: list[str], value: str | None) -> int:
     return 0
 
 
-def _provider_options(current_provider: str | None) -> list[str]:
-    options = list(PROVIDERS)
-    if current_provider and current_provider not in options:
-        options.insert(0, current_provider)
-    return options
+def _flatten_provider_chain_presets(value: Any) -> list[str]:
+    presets: list[str] = []
+    if isinstance(value, str) and ":" in value:
+        presets.append(value)
+    elif isinstance(value, list):
+        for item in value:
+            presets.extend(_flatten_provider_chain_presets(item))
+    elif isinstance(value, dict):
+        for item in value.values():
+            presets.extend(_flatten_provider_chain_presets(item))
+    return presets
 
 
-def _key_env_options(provider: str, current_key_env: str | None) -> list[str]:
-    options = list_api_key_env_names(provider, root_dir=PROJECT_ROOT)
-    fallback = current_key_env or DEFAULT_KEY_ENV.get(provider, "")
-    if fallback and fallback not in options:
-        options.insert(0, fallback)
-    return options or [""]
+@st.cache_data(show_spinner=False)
+def _provider_chain_presets() -> list[str]:
+    path = PROJECT_ROOT / "config" / "model_example.json"
+    if not path.exists():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return list(dict.fromkeys(_flatten_provider_chain_presets(data)))
 
 
-@st.cache_data(ttl=600, show_spinner=False)
-def _cached_model_options(
-    provider: str,
-    api_key_env: str,
-    current_model: str,
-    fetch_online: bool,
-) -> ModelCatalogResult:
-    if fetch_online:
-        return fetch_model_options(
-            provider,
-            api_key_env=api_key_env or None,
-            current_model=current_model,
-            root_dir=PROJECT_ROOT,
-        )
-    return ModelCatalogResult(
-        fallback_model_options(provider, current_model=current_model, root_dir=PROJECT_ROOT),
-        "official" if provider == "deepseek" else "env",
-        None,
-    )
+PICKER_API_PROVIDERS = [p for p in API_PROVIDERS if p not in ("mock", "auto")]
+PICKER_PROVIDERS = PICKER_API_PROVIDERS + list(CLI_BACKENDS)
 
 
-def _model_options(
-    provider: str,
-    api_key_env: str,
-    current_model: str,
-    fetch_online: bool,
-) -> tuple[list[str], ModelCatalogResult]:
-    result = _cached_model_options(provider, api_key_env, current_model, fetch_online)
-    options = list(result.models)
-    if current_model and current_model not in options:
-        options.insert(0, current_model)
-    return options or [current_model or ""], result
+@st.cache_data(show_spinner=False)
+def _curated_models_by_provider() -> dict[str, list[str]]:
+    """Hardcoded default model lists, parsed per provider from model_example.json."""
+    path = PROJECT_ROOT / "config" / "model_example.json"
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    out: dict[str, list[str]] = {}
+    if isinstance(data, dict):
+        for provider, section in data.items():
+            models: list[str] = []
+            for fragment in _flatten_provider_chain_presets(section):
+                prov, _, model = fragment.partition(":")
+                if prov == provider and model:
+                    models.append(model)
+            if models:
+                out[provider] = list(dict.fromkeys(models))
+    return out
+
+
+@st.cache_data(show_spinner="Fetching models...", ttl=300)
+def _live_models(provider: str, api_key_env: str | None) -> tuple[list[str], str, str | None]:
+    result = fetch_model_options(provider, api_key_env=api_key_env, root_dir=str(PROJECT_ROOT))
+    return result.models, result.source, result.error
+
+
+def _model_options(provider: str, live: bool) -> tuple[list[str], str]:
+    """Models for the dropdown: live fetch (if enabled) merged over hardcoded defaults."""
+    curated = _curated_models_by_provider().get(provider, [])
+    options = list(curated)
+    note = "default (model_example.json)"
+    if live and provider in PICKER_API_PROVIDERS:
+        key_names = list_api_key_env_names(provider, root_dir=PROJECT_ROOT)
+        api_key_env = key_names[0] if key_names else None
+        models, source, error = _live_models(provider, api_key_env)
+        options = list(dict.fromkeys(models + curated))
+        note = f"live: {source}" + (f" — {error}" if error else "")
+    options = list(dict.fromkeys(options + fallback_model_options(provider, root_dir=PROJECT_ROOT)))
+    return options, note
+
+
+def _append_to_chain(agent_id: str) -> None:
+    provider = str(st.session_state.get(f"{agent_id}_pick_provider", "")).strip()
+    model = str(st.session_state.get(f"{agent_id}_pick_model", "")).strip()
+    effort = str(st.session_state.get(f"{agent_id}_pick_effort", "")).strip()
+    if not provider:
+        return
+    fragment = f"{provider}:{model}" if model and model != "(none)" else provider
+    if effort and "@" not in fragment:
+        fragment = f"{fragment}@{effort}"
+    chain_key = f"{agent_id}_provider_chain"
+    current = str(st.session_state.get(chain_key, "")).strip()
+    st.session_state[chain_key] = f"{current}, {fragment}" if current else fragment
+
+
+def _legacy_provider_chain(initial_config: dict[str, Any]) -> str:
+    provider_chain = str(initial_config.get("provider_chain") or "").strip()
+    if provider_chain:
+        return provider_chain
+    provider = str(initial_config.get("provider") or "openrouter").strip()
+    model = str(initial_config.get("model") or "").strip()
+    if provider and model:
+        return f"{provider}:{model}"
+    return provider
 
 
 def _render_agent_llm_row(
@@ -131,67 +169,82 @@ def _render_agent_llm_row(
     display_name: str,
     role: str,
     initial_config: dict[str, Any],
-    *,
-    fetch_online: bool,
+    live_fetch: bool = False,
 ) -> dict[str, str]:
     st.markdown('<div class="agent-row">', unsafe_allow_html=True)
-    heading, provider_col, key_col, model_col = st.columns([1.4, 1.05, 1.15, 1.8])
+    heading, chain_col, tuning_col = st.columns([1.25, 3.1, 1.05])
     with heading:
         st.markdown(f"**{display_name}**")
         st.markdown(f'<span class="muted">{agent_id} · {role}</span>', unsafe_allow_html=True)
 
-    current_provider = str(initial_config.get("provider") or "openrouter")
-    provider_options = _provider_options(current_provider)
-    with provider_col:
-        provider = st.selectbox(
-            "Provider",
-            provider_options,
-            index=_select_index(provider_options, current_provider),
-            key=f"{agent_id}_provider",
+    current_chain = _legacy_provider_chain(initial_config)
+    chain_key = f"{agent_id}_provider_chain"
+    if chain_key not in st.session_state:
+        st.session_state[chain_key] = current_chain
+    current_provider = current_chain.split(",")[0].strip().partition(":")[0]
+
+    with chain_col:
+        pick_provider, pick_model, pick_effort, add_col = st.columns([1, 1.7, 0.9, 0.5])
+        with pick_provider:
+            provider = st.selectbox(
+                "Provider",
+                PICKER_PROVIDERS,
+                index=_select_index(PICKER_PROVIDERS, current_provider),
+                key=f"{agent_id}_pick_provider",
+            )
+        options, note = _model_options(provider, live_fetch)
+        display_options = options or ["(none)"]
+        model_key = f"{agent_id}_pick_model"
+        if st.session_state.get(model_key) not in display_options:
+            st.session_state.pop(model_key, None)
+        with pick_model:
+            st.selectbox("Model", display_options, key=model_key)
+        effort_options = CLI_EFFORT_CHOICES.get(provider, ("",))
+        effort_key = f"{agent_id}_pick_effort"
+        if st.session_state.get(effort_key) not in effort_options:
+            st.session_state.pop(effort_key, None)
+        with pick_effort:
+            st.selectbox("Effort", effort_options, key=effort_key)
+        with add_col:
+            st.markdown("<div style='height:1.8rem'></div>", unsafe_allow_html=True)
+            st.button(
+                "➕",
+                key=f"{agent_id}_add",
+                help="Append provider:model@effort to the chain below",
+                on_click=_append_to_chain,
+                args=(agent_id,),
+                use_container_width=True,
+            )
+        st.caption(f"Source: {note}")
+        provider_chain = st.text_area(
+            "Provider chain (editable — comma-separated fallback order)",
+            height=72,
+            key=chain_key,
         )
 
-    current_key_env = str(initial_config.get("api_key_env") or DEFAULT_KEY_ENV.get(provider, ""))
-    key_options = _key_env_options(provider, current_key_env)
-    with key_col:
-        api_key_env = st.selectbox(
-            "API key env",
-            key_options,
-            index=_select_index(key_options, current_key_env),
-            key=f"{agent_id}_{provider}_api_key_env",
+    with tuning_col:
+        temperature = st.number_input(
+            "Temp",
+            min_value=0.0,
+            max_value=2.0,
+            value=float(initial_config.get("temperature", 0.3)),
+            step=0.1,
+            key=f"{agent_id}_temperature",
         )
-
-    initial_provider = str(initial_config.get("provider") or "openrouter")
-    initial_model = str(initial_config.get("model") or "")
-    current_model = initial_model if provider == initial_provider else ""
-    model_options, model_result = _model_options(
-        provider,
-        api_key_env,
-        current_model,
-        fetch_online,
-    )
-    with model_col:
-        model_choice = st.selectbox(
-            "Model",
-            model_options,
-            index=_select_index(model_options, current_model),
-            key=f"{agent_id}_{provider}_model_select",
+        max_output_tokens = st.number_input(
+            "Max tokens",
+            min_value=256,
+            max_value=32768,
+            value=int(initial_config.get("max_output_tokens", 4096)),
+            step=256,
+            key=f"{agent_id}_max_output_tokens",
         )
-        model = st.text_input(
-            "Actual request model",
-            value=model_choice,
-            key=f"{agent_id}_{provider}_model",
-            label_visibility="collapsed",
-        )
-        if model_result.error:
-            st.caption(f"Model list fallback: {model_result.error}")
-        else:
-            st.caption(f"Model source: {model_result.source}")
 
     st.markdown("</div>", unsafe_allow_html=True)
     return {
-        "provider": provider,
-        "model": model,
-        "api_key_env": api_key_env,
+        "provider_chain": provider_chain,
+        "temperature": temperature,
+        "max_output_tokens": max_output_tokens,
     }
 
 
@@ -238,10 +291,24 @@ with st.sidebar:
         council_names,
         index=_select_index(council_names, "experts"),
     )
-    rounds = st.number_input("Rounds", min_value=1, max_value=5, value=1, step=1)
-    fetch_online = st.toggle("Fetch model lists with API keys", value=False)
+    rounds = st.number_input("Rounds", min_value=1, max_value=10, value=1, step=1)
     use_mock = st.toggle("Mock mode", value=False)
-    st.caption("Mock mode is off by default. Real LLM calls use configs/agent_llms.json and .env.")
+    last_result = st.session_state.get("last_result")
+    continue_previous = st.toggle(
+        "Continue previous transcript",
+        value=False,
+        disabled=not bool(last_result),
+    )
+    live_fetch = st.toggle(
+        "Fetch live model lists",
+        value=False,
+        help=(
+            "On: query each provider's /models endpoint using .env keys to populate the "
+            "Model dropdowns. Off: use the hardcoded defaults from model_example.json / "
+            "model_catalog.json. The Provider chain text box is always editable either way."
+        ),
+    )
+    st.caption("Real LLM calls use provider chains in config/agent_llms.json and keys in .env.")
 
 council, personas = load_council_personas(council_name, PROJECT_ROOT)
 
@@ -251,7 +318,7 @@ metric_cols[1].metric("Agents", len(personas))
 metric_cols[2].metric("Mode", "Mock" if use_mock else "Real LLM")
 
 st.subheader("Agent LLM Routing")
-st.caption("The UI saves provider, model, and api_key_env only. API key values stay in .env.")
+st.caption("Use provider:model@effort chains. Direct API providers read .env keys; Claude/Codex use local CLI; Grok/Antigravity/Copilot use CLIProxyAPI HTTP.")
 
 updates: dict[str, dict[str, str]] = {}
 for persona in personas:
@@ -261,7 +328,7 @@ for persona in personas:
         persona.name,
         persona.role,
         initial,
-        fetch_online=fetch_online,
+        live_fetch=live_fetch,
     )
 
 merged_agent_configs = _merge_agent_configs(saved_agent_configs, updates)
@@ -272,7 +339,7 @@ with save_col:
         path = _save_configs(merged_agent_configs, str(config_document.get("description", "")))
         st.success(f"Saved: {path.relative_to(PROJECT_ROOT)}")
 with json_col:
-    with st.expander("Preview configs/agent_llms.json"):
+    with st.expander("Preview config/agent_llms.json"):
         st.json(
             {
                 "description": str(config_document.get("description", DEFAULT_DESCRIPTION)),
@@ -280,6 +347,8 @@ with json_col:
             },
             expanded=False,
         )
+    with st.expander("Model examples from config/model_example.json"):
+        st.json(_provider_chain_presets(), expanded=False)
 
 st.divider()
 st.subheader("Run Roundtable")
@@ -349,6 +418,10 @@ if st.button("Run With Current Config", type="primary", disabled=run_disabled):
             root_dir=PROJECT_ROOT,
             output_dir=PROJECT_ROOT / "logs",
             progress_callback=handle_progress,
+            initial_messages=last_result.get("messages", []) if continue_previous and last_result else None,
+            initial_round_summaries=(
+                last_result.get("round_summaries", []) if continue_previous and last_result else None
+            ),
         )
     except Exception as exc:
         progress_events.append(
@@ -368,6 +441,7 @@ if st.button("Run With Current Config", type="primary", disabled=run_disabled):
         st.stop()
 
     progress_bar.progress(1.0, text="Run complete")
+    st.session_state["last_result"] = result
     status_slot.success("Run complete")
     st.success(f"Log saved to {Path(result['log_path']).relative_to(PROJECT_ROOT)}")
     st.markdown("### Final Summary")

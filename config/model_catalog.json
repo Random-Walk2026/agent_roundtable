@@ -1,0 +1,27 @@
+{
+  "_README": "Runtime model-catalog data loaded by llm/catalog.py. Per provider: model_env names the .env variable holding extra model ids (comma-separated), key_prefixes lists the .env API-key prefixes (numbered keys like NAME_1..N are auto-discovered), official_models is a static fallback model list used when the provider has no live /models endpoint. If this file is missing or invalid, llm/catalog.py falls back to its built-in defaults.",
+  "providers": {
+    "gemini": {
+      "model_env": "GEMINI_MODEL",
+      "key_prefixes": ["GEMINI_API_KEY"]
+    },
+    "openai": {
+      "model_env": "OPENAI_MODEL",
+      "key_prefixes": ["OPENAI_API_KEY"]
+    },
+    "openrouter": {
+      "model_env": "OPENROUTER_MODEL",
+      "key_prefixes": ["OPENROUTER_API_KEY"]
+    },
+    "deepseek": {
+      "model_env": "DEEPSEEK_MODEL",
+      "key_prefixes": ["DEEPSEEK_API_KEY"],
+      "official_models": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "deepseek-chat",
+        "deepseek-reasoner"
+      ]
+    }
+  }
+}

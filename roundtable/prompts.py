@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.state import Persona, RoundtableMessage
+from roundtable.state import Persona, RoundtableMessage
 
 
 def _format_recent_messages(messages: list[RoundtableMessage], limit: int = 8) -> str:

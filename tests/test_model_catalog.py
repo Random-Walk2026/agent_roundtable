@@ -1,4 +1,4 @@
-from src.model_catalog import (
+from llm.catalog import (
     fetch_model_options,
     fallback_model_options,
     list_api_key_env_names,

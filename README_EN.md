@@ -15,7 +15,7 @@ You do not need to understand LangGraph to use this project. Think of it as a co
 ## What It Can Do
 
 - Run a roundtable from the command line or from a local web UI.
-- Set a separate provider, model, and API key environment variable for each agent.
+- Set a separate `provider:model@effort` fallback chain for each agent.
 - Keep real API keys in `.env` only. They are not written into JSON files or reports.
 - Let domain experts read their own local long-form knowledge folders.
 - Save every run to `logs/`.
@@ -65,10 +65,10 @@ http://localhost:8501
 In the UI you can:
 
 - Choose a council: `experts` or `persona_inspired`.
-- Set the provider for each agent.
-- Set the model for each agent.
-- Choose which `.env` API key variable each agent should use.
-- Save changes to `configs/agent_llms.json`.
+- Set a provider-chain for each agent.
+- Copy common model chains from `config/model_example.json`.
+- Continue the next run from the previous transcript.
+- Save changes to `config/agent_llms.json`.
 - Enter a topic and run a real LLM roundtable.
 - Watch a progress bar, current stage, recent events, and error details if a run fails.
 - Preview the final summary and transcript.
@@ -115,15 +115,45 @@ DeepSeek uses an OpenAI-compatible API with `base_url=https://api.deepseek.com`.
 - `deepseek-chat`: legacy compatibility name, scheduled by DeepSeek for deprecation on 2026-07-24 23:59 Beijing time.
 - `deepseek-reasoner`: legacy compatibility name, scheduled by DeepSeek for deprecation on 2026-07-24 23:59 Beijing time.
 
+Claude / Codex can use local CLI login state. Grok / Antigravity / Copilot can use a local CLIProxyAPI HTTP service. The model-chain syntax is documented in `config/model_example.json`:
+
+```text
+provider:model@effort
+```
+
+Example:
+
+```text
+claude:sonnet@high, codex:gpt-5.5@medium, gemini:gemini-2.5-flash
+```
+
+`@effort` only affects CLI providers. Gemini / OpenRouter / DeepSeek ignore it.
+
+### Optional dependency: CLIProxyAPI
+
+Provider-chain entries for `antigravity` / `grok` / `copilot` require a separate **CLIProxyAPI** service running locally. It is an independent open-source proxy that exposes your locally logged-in CLI accounts (Antigravity, Grok, Copilot, etc.) as OpenAI/Gemini/Claude-compatible HTTP endpoints.
+
+- Project: <https://github.com/router-for-me/CLIProxyAPI>
+- After starting it per its docs, it listens on `http://127.0.0.1:8317` by default.
+- Point this project at it via `.env`:
+
+```env
+CLI_PROXY_BASE_URL=http://127.0.0.1:8317
+CLI_PROXY_API_KEY=local        # must match an entry in CLIProxyAPI's api-keys
+CLI_PROXY_TIMEOUT=600
+```
+
+If you do not use the `antigravity` / `grok` / `copilot` chains, CLIProxyAPI is **not** required — direct APIs (Gemini/OpenAI/OpenRouter/DeepSeek) and the local Claude/Codex CLIs do not depend on it.
+
 ## Which Model Does Each Agent Use?
 
 The central configuration file is:
 
 ```text
-configs/agent_llms.json
+config/agent_llms.json
 ```
 
-This file has one job: define which LLM each agent calls.
+This file has one job: define which LLM fallback chain each agent calls.
 
 Example:
 
@@ -131,20 +161,20 @@ Example:
 {
   "agents": {
     "macro_economist": {
-      "provider": "openrouter",
-      "model": "nvidia/nemotron-3-super-120b-a12b:free",
-      "api_key_env": "OPENROUTER_API_KEY_1"
+      "provider_chain": "antigravity:gemini-3.1-pro-low, gemini:gemini-2.5-flash, claude:sonnet@high",
+      "temperature": 0.3,
+      "max_output_tokens": 4096
     },
     "ai_researcher": {
-      "provider": "openrouter",
-      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "api_key_env": "OPENROUTER_API_KEY_1"
+      "provider_chain": "codex:gpt-5.5@high, antigravity:gemini-3.5-flash-low, gemini:gemini-3.5-flash",
+      "temperature": 0.25,
+      "max_output_tokens": 4096
     }
   }
 }
 ```
 
-`api_key_env` is not the API key itself. It is the name of the variable the program should read from `.env`.
+Real keys are still read only from `.env`. `config/model_example.json` is a copy-paste reference and is not loaded by the runtime.
 
 If you change models in the UI, the UI writes the result back to this JSON file.
 
@@ -152,8 +182,8 @@ If you change models in the UI, the UI writes the result back to this JSON file.
 
 When you run a roundtable, model configuration is resolved in this order:
 
-1. Command-line `--mock` or `--provider`: temporarily overrides all agents.
-2. `configs/agent_llms.json`: per-agent model routing.
+1. Command-line `--mock`, `--provider`, or `--provider-chain`: temporarily overrides all agents.
+2. `config/agent_llms.json`: per-agent model routing.
 3. The `llm` field inside an agent YAML file: fallback configuration.
 4. Default models from `.env`, such as `OPENROUTER_MODEL` or `GEMINI_MODEL`.
 5. If no usable key is found, `auto` falls back to the local mock model.
@@ -161,8 +191,8 @@ When you run a roundtable, model configuration is resolved in this order:
 Recommended use:
 
 - First demo: use `--mock`.
-- Normal use: edit `.env` and `configs/agent_llms.json`, or use the UI.
-- Temporary provider test: use `--provider openrouter` or `--provider gemini`.
+- Normal use: edit `.env` and `config/agent_llms.json`, or use the UI.
+- Temporary chain test: use `--provider-chain "claude:sonnet@high, gemini:gemini-2.5-flash"`.
 
 ## Project Structure
 
@@ -171,22 +201,28 @@ agent_roundtable/
 ├── main.py                  # Command-line entry point
 ├── ui/
 │   └── app.py               # Streamlit local UI
-├── src/
+├── roundtable/              # Business layer: how the roundtable runs
 │   ├── graph.py             # Roundtable flow: moderator, agents, summaries
 │   ├── agents.py            # What each agent does during a turn
-│   ├── llm.py               # OpenRouter / Gemini / OpenAI / DeepSeek / Mock clients
-│   ├── model_catalog.py     # Reads .env key names and fetches model lists for the UI
-│   ├── agent_llm_config.py  # Reads and writes configs/agent_llms.json
-│   ├── loader.py            # Loads YAML files from agents/ and councils/
+│   ├── agent_llm_config.py  # Reads and writes config/agent_llms.json
+│   ├── loader.py            # Loads YAML from config/domain_experts/, persona_inspired/, councils/
 │   ├── logger.py            # Saves Markdown reports
 │   ├── prompts.py           # Prompt templates
 │   └── state.py             # Runtime state data structures
-├── agents/
+├── llm/                     # Model layer: how models are called
+│   ├── facade.py            # generate_text / provider-chain facade
+│   ├── router.py            # Provider-chain routing and transport selection
+│   ├── providers_api.py     # Direct API clients
+│   ├── transport_cli.py     # Local CLI subprocess calls
+│   ├── transport_http.py    # CLIProxyAPI HTTP calls
+│   └── catalog.py           # Model list / provider metadata
+├── config/                  # All declarative configuration
 │   ├── domain_experts/      # Main experts with RAG
-│   └── persona_inspired/    # Style-inspired agents, no RAG for now
-├── councils/                # Council member lists
-├── configs/
-│   └── agent_llms.json      # Per-agent model routing
+│   ├── persona_inspired/    # Style-inspired agents, no RAG for now
+│   ├── councils/            # Council member lists
+│   ├── agent_llms.json      # Per-agent provider-chain routing
+│   ├── model_example.json   # Copy-paste provider-chain reference
+│   └── model_catalog.json   # Model catalog data (read by catalog.py)
 ├── knowledge/               # Your local books, papers, and long-form Markdown
 ├── rag/                     # Document chunking, indexing, and retrieval
 ├── vector_db/chroma/        # Generated local RAG indexes
@@ -198,9 +234,9 @@ agent_roundtable/
 
 ## What The Main Folders Mean
 
-### `agents/`
+### `config/domain_experts/` and `config/persona_inspired/`
 
-This folder contains agent "profile cards".
+These folders contain agent "profile cards".
 
 An agent YAML file describes:
 
@@ -211,13 +247,13 @@ An agent YAML file describes:
 - strengths and blind spots
 - the matching RAG knowledge folder
 
-For example, `agents/domain_experts/macro_economist.yaml` defines the macroeconomics and institutions expert.
+For example, `config/domain_experts/macro_economist.yaml` defines the macroeconomics and institutions expert.
 
-### `councils/`
+### `config/councils/`
 
 This folder defines who joins a roundtable.
 
-For example, `councils/experts.yaml` includes:
+For example, `config/councils/experts.yaml` includes:
 
 ```yaml
 members:
@@ -230,9 +266,9 @@ members:
 
 These five agents speak in that order.
 
-### `configs/`
+### `config/`
 
-This folder contains runtime configuration. The most important file is `configs/agent_llms.json`, which controls the model used by each agent.
+This folder contains runtime configuration. The most important file is `config/agent_llms.json`, which controls the model used by each agent.
 
 ### `knowledge/`
 
@@ -328,7 +364,7 @@ Suppose you want to add an energy expert.
 1. Create a new agent file:
 
 ```text
-agents/domain_experts/energy_expert.yaml
+config/domain_experts/energy_expert.yaml
 ```
 
 2. Write the profile card:
@@ -360,20 +396,20 @@ profile:
 knowledge/energy_expert/
 ```
 
-4. Add the new agent to `councils/experts.yaml` or to a new council:
+4. Add the new agent to `config/councils/experts.yaml` or to a new council:
 
 ```yaml
 members:
   - energy_expert
 ```
 
-5. Add model routing in `configs/agent_llms.json`:
+5. Add model routing in `config/agent_llms.json`:
 
 ```json
 {
-  "provider": "openrouter",
-  "model": "nvidia/nemotron-3-super-120b-a12b:free",
-  "api_key_env": "OPENROUTER_API_KEY_1"
+  "provider_chain": "claude:sonnet@high, gemini:gemini-2.5-flash, openrouter:nvidia/nemotron-3-super-120b-a12b:free",
+  "temperature": 0.3,
+  "max_output_tokens": 4096
 }
 ```
 
@@ -393,7 +429,7 @@ Mock run, no API key needed:
 python main.py --topic "How will AI affect investing and employment?" --council experts --rounds 1 --mock
 ```
 
-Real LLM run using `configs/agent_llms.json`:
+Real LLM run using `config/agent_llms.json`:
 
 ```bash
 python main.py --topic "How will AI affect investing and employment?" --council experts --rounds 1
@@ -409,6 +445,12 @@ Temporarily force all agents to use one model:
 
 ```bash
 python main.py --topic "Will AI replace programmers?" --council experts --rounds 1 --provider openrouter --model "openai/gpt-oss-120b:free"
+```
+
+Temporarily force all agents to use a workflow-style fallback chain:
+
+```bash
+python main.py --topic "Will AI replace programmers?" --council experts --rounds 1 --provider-chain "claude:sonnet@high, gemini:gemini-2.5-flash"
 ```
 
 Choose an output directory:
@@ -450,9 +492,10 @@ Usually safe to commit:
 
 - source code
 - README files
-- `agents/*.yaml`
-- `councils/*.yaml`
-- `configs/agent_llms.json`
+- `config/domain_experts/*.yaml`
+- `config/persona_inspired/*.yaml`
+- `config/councils/*.yaml`
+- `config/agent_llms.json`
 - `knowledge/README.md`
 - `.gitkeep` placeholder files
 
@@ -468,22 +511,16 @@ Yes. Use `--mock`:
 python main.py --topic "Test run" --council experts --rounds 1 --mock
 ```
 
-### Why does the UI not show a model list?
+### Where do UI model choices come from?
 
-Check:
-
-- Does `.env` contain the selected API key variable?
-- Does the UI `api_key_env` value match the variable name in `.env`?
-- Did you enable `Fetch model lists with API keys`?
-
-If model fetching fails, you can still type the model name manually.
+The UI now edits provider chains directly. Common model chains come from `config/model_example.json`; real calls still use `config/agent_llms.json` plus `.env`.
 
 ### Why did a real LLM run fail?
 
 Common causes:
 
 - API key is empty.
-- `api_key_env` is wrong.
+- provider-chain is wrong, or the matching `.env` key / local CLI / CLIProxyAPI service is not ready.
 - model name is unavailable.
 - provider rate limits or network failures.
 - a free model is temporarily unavailable.
@@ -518,7 +555,7 @@ python -m pytest -q
 Check the JSON config:
 
 ```bash
-python -m json.tool configs/agent_llms.json >/dev/null
+python -m json.tool config/agent_llms.json >/dev/null
 ```
 
 Start the UI:
