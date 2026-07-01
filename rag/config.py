@@ -13,11 +13,12 @@ CHUNK_OVERLAP = 120
 KNOWLEDGE_DIR = Path("knowledge")
 EXPERTS_SUBDIR = "experts"
 PEOPLE_SUBDIR = "people"
-PERSON_SOURCE_KINDS = frozenset({"book", "x", "news", "report"})
+PERSON_SOURCE_KINDS = frozenset({"book", "x", "weibo", "news", "report"})
 SOURCE_KIND_WEIGHTS: dict[str, float] = {
     "book": 4.0,
     "report": 3.0,
     "x": 2.0,
+    "weibo": 2.0,
     "news": 1.0,
 }
 EXPERT_WORK_TYPE_FOLDERS: dict[str, str] = {

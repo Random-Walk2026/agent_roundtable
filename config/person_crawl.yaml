@@ -1,0 +1,26 @@
+# Person crawler registry: maps agent_roundtable person_id -> spider X/weibo targets.
+# spider_base_path can be overridden by SPIDER_BASE_PATH in .env
+
+# Override locally via SPIDER_BASE_PATH in .env
+spider_base_path: ~/GitHub/spider
+
+defaults:
+  x:
+    mode: with_replies
+    options:
+      file-filter: "False"
+  weibo:
+    since_date: 7
+    end_date: now
+    modes:
+      - posts
+
+people:
+  desmond_shum:
+    display_name: Desmond Shum
+    x:
+      user: DesmondShum
+      mode: with_replies
+      options:
+        file-filter: "False"
+    weibo: null

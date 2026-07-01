@@ -16,7 +16,8 @@ from typing import Any, Iterable
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_EXPORT_DIR = PROJECT_ROOT / "knowledge" / "people" / "desmond_shum" / "x"
+DEFAULT_PERSON_ID = "desmond_shum"
+DEFAULT_DISPLAY_NAME = "Desmond Shum"
 
 RT_PREFIX_RE = re.compile(r"^RT @\w+:\s*", re.MULTILINE)
 
@@ -191,6 +192,8 @@ def export_markdown(
     tweets: list[Tweet],
     output_dir: Path,
     *,
+    person_id: str = DEFAULT_PERSON_ID,
+    display_name: str = DEFAULT_DISPLAY_NAME,
     combined: bool = True,
     split_long_posts: bool = True,
     long_post_min_length: int = 800,
@@ -201,7 +204,7 @@ def export_markdown(
     if combined:
         combined_path = output_dir / "corpus.md"
         sections = [
-            "# Desmond Shum X/Twitter Corpus",
+            f"# {display_name} X/Twitter Corpus",
             "",
             f"Exported at: {datetime.now().isoformat(timespec='seconds')}",
             f"Total tweets: {len(tweets)}",
@@ -318,9 +321,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--query", help="Case-insensitive substring filter.")
     parser.add_argument("--limit", type=int, default=10, help="Preview/search result limit.")
     parser.add_argument(
+        "--person-name",
+        default=DEFAULT_PERSON_ID,
+        help="Person folder name under knowledge/people/, e.g. desmond_shum.",
+    )
+    parser.add_argument(
+        "--display-name",
+        default="",
+        help="Display name for corpus.md title. Defaults to --person-name.",
+    )
+    parser.add_argument(
         "--output-dir",
-        default=str(DEFAULT_EXPORT_DIR),
-        help="Directory for export-md output.",
+        default="",
+        help="Directory for export-md output. Defaults to knowledge/people/<person-name>/x/.",
     )
     parser.add_argument(
         "--csv-output",
@@ -388,9 +401,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "export-md":
+        person_id = args.person_name
+        display_name = args.display_name or person_id
+        output_dir = (
+            Path(args.output_dir).expanduser()
+            if args.output_dir
+            else PROJECT_ROOT / "knowledge" / "people" / person_id / "x"
+        )
         result = export_markdown(
             filtered,
-            Path(args.output_dir).expanduser(),
+            output_dir,
+            person_id=person_id,
+            display_name=display_name,
             combined=not args.no_combined,
         )
         print(f"Exported {result['files_written']} files to {result['output_dir']}")
@@ -400,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  ... and {result['files_written'] - 5} more")
         print(
             "\nNext step for RAG:\n"
-            "  python -m rag.ingest --person-name desmond_shum --embedding-provider keyword"
+            f"  python -m rag.ingest --person-name {person_id} --embedding-provider keyword"
         )
         return 0
 
