@@ -68,7 +68,7 @@ def run_spider_for_person(
     if not config.spider_base_path.exists():
         raise FileNotFoundError(
             f"Spider project not found at {config.spider_base_path}. "
-            "Set SPIDER_BASE_PATH in .env or edit config/person_crawl.yaml."
+            "Set SPIDER_BASE_PATH in .env or copy config/person_crawl.example.yaml to config/person_crawl.yaml."
         )
 
     selected = platforms or {"x", "weibo"}

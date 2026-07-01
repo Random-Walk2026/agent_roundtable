@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Crawl X/Weibo via spider and import Markdown into knowledge/people/<person_id>/.",
     )
-    parser.add_argument("person_id", nargs="?", help="Person folder name, e.g. desmond_shum")
+    parser.add_argument("person_id", nargs="?", help="Person folder name, e.g. example_person")
     parser.add_argument("--list", action="store_true", help="List configured person IDs.")
     parser.add_argument("--platform", choices=["x", "weibo"], action="append", help="Limit platforms.")
     parser.add_argument("--dry-run", action="store_true", help="Validate spider targets only.")
@@ -38,8 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lang", default="zh", help="Language filter for X export; empty disables.")
     parser.add_argument(
         "--config",
-        default=str(PROJECT_ROOT / "config" / "person_crawl.yaml"),
-        help="Path to person crawl registry YAML.",
+        default="",
+        help="Path to person crawl registry YAML. Defaults to config/person_crawl.yaml or the example file.",
     )
     return parser
 
@@ -47,7 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    config = load_person_crawl_config(args.config, root_dir=PROJECT_ROOT)
+    config_path = args.config or None
+    config = load_person_crawl_config(config_path, root_dir=PROJECT_ROOT)
 
     if args.list:
         for person_id in config.list_person_ids():

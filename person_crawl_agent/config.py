@@ -9,6 +9,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "person_crawl.yaml"
+EXAMPLE_CONFIG_PATH = PROJECT_ROOT / "config" / "person_crawl.example.yaml"
 
 
 @dataclass(frozen=True)
@@ -83,13 +84,22 @@ def load_person_crawl_config(
     *,
     root_dir: Path | str | None = None,
 ) -> PersonCrawlConfig:
-    config_path = Path(path or DEFAULT_CONFIG_PATH).expanduser()
+    if path is None:
+        local_config = DEFAULT_CONFIG_PATH
+        if not local_config.is_absolute():
+            local_config = (Path(root_dir or PROJECT_ROOT) / local_config).resolve()
+        config_path = local_config if local_config.exists() else EXAMPLE_CONFIG_PATH
+    else:
+        config_path = Path(path).expanduser()
     if not config_path.is_absolute():
         root = Path(root_dir or PROJECT_ROOT).expanduser().resolve()
         config_path = (root / config_path).resolve()
 
     if not config_path.exists():
-        raise FileNotFoundError(f"Person crawl config not found: {config_path}")
+        raise FileNotFoundError(
+            f"Person crawl config not found: {config_path}. "
+            "Copy config/person_crawl.example.yaml to config/person_crawl.yaml."
+        )
 
     data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):

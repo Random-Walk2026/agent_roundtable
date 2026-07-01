@@ -6,6 +6,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
+# Local crawl targets (real person/account mappings stay on your machine).
+config/person_crawl.yaml
+
 # Local/private corpora and generated artifacts. Do not publish these.
 knowledge/**/*.md
 knowledge/**/*.markdown

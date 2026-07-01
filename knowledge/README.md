@@ -42,10 +42,11 @@ knowledge/people/desmond_shum/x/corpus.md
 ## Import helpers
 
 ```bash
-python scripts/crawl_person_sources.py desmond_shum --dry-run
-python scripts/crawl_person_sources.py desmond_shum --skip-crawl --ingest-rag
+cp config/person_crawl.example.yaml config/person_crawl.yaml
+python scripts/crawl_person_sources.py example_person --dry-run
+python scripts/crawl_person_sources.py example_person --skip-crawl --ingest-rag
 python scripts/parse_twitter_jsonl.py ~/path/to/tweets.jsonl --command export-md --originals-only --min-length 300 --lang zh
-python scripts/parse_weibo_json.py ~/path/to/uid.json --command export-md --person-name desmond_shum
+python scripts/parse_weibo_json.py ~/path/to/uid.json --command export-md --person-name example_person
 python scripts/import_person_source.py desmond_shum book "/path/to/book.md"
 python -m rag.ingest --expert-name macroeconomics --embedding-provider keyword
 python -m rag.ingest --person-name desmond_shum --embedding-provider keyword

@@ -18,15 +18,15 @@ def _write_person_crawl_config(path: Path, *, spider_base_path: Path) -> None:
             "weibo": {"since_date": 7, "modes": ["posts"]},
         },
         "people": {
-            "desmond_shum": {
-                "display_name": "Desmond Shum",
-                "x": {"user": "DesmondShum"},
+            "example_person": {
+                "display_name": "Example Person",
+                "x": {"user": "example_handle"},
                 "weibo": None,
             },
-            "guaxichan": {
-                "display_name": "瓜希酱",
+            "example_weibo_person": {
+                "display_name": "Example Weibo",
                 "x": None,
-                "weibo": {"id": "1842707505", "name": "瓜希酱"},
+                "weibo": {"id": "1234567890", "name": "example_weibo_name"},
             },
         },
     }
@@ -40,10 +40,10 @@ def test_load_person_crawl_config_merges_defaults(tmp_path: Path):
     _write_person_crawl_config(config_path, spider_base_path=spider_base)
 
     config = load_person_crawl_config(config_path, root_dir=tmp_path)
-    person = config.get_person("desmond_shum")
+    person = config.get_person("example_person")
 
     assert person.x is not None
-    assert person.x.payload["user"] == "DesmondShum"
+    assert person.x.payload["user"] == "example_handle"
     assert person.x.payload["mode"] == "with_replies"
     assert person.weibo is None
 
@@ -52,7 +52,7 @@ def test_find_tweets_jsonl_under_twitter_subdir(tmp_path: Path):
     spider_base = tmp_path / "spider"
     spider_base.mkdir()
     output_dir = tmp_path / "drive"
-    tweets = output_dir / "twitter" / "DesmondShum" / "tweets.jsonl"
+    tweets = output_dir / "twitter" / "example_handle" / "tweets.jsonl"
     tweets.parent.mkdir(parents=True)
     tweets.write_text('{"tweet_id": 1, "content": "hello"}\n', encoding="utf-8")
     (spider_base / "settings.json").write_text(
@@ -60,7 +60,7 @@ def test_find_tweets_jsonl_under_twitter_subdir(tmp_path: Path):
         encoding="utf-8",
     )
 
-    found = find_tweets_jsonl(spider_base_path=spider_base, handle="DesmondShum")
+    found = find_tweets_jsonl(spider_base_path=spider_base, handle="example_handle")
     assert found == tweets.resolve()
 
 
@@ -68,7 +68,7 @@ def test_find_weibo_json_under_name_subdir(tmp_path: Path):
     spider_base = tmp_path / "spider"
     spider_base.mkdir()
     output_dir = tmp_path / "character"
-    weibo_json = output_dir / "瓜希酱" / "1842707505.json"
+    weibo_json = output_dir / "example_weibo_name" / "1234567890.json"
     weibo_json.parent.mkdir(parents=True)
     weibo_json.write_text('{"weibo": [{"id": "abc", "content": "测试"}]}', encoding="utf-8")
     (spider_base / "settings.json").write_text(
@@ -78,8 +78,8 @@ def test_find_weibo_json_under_name_subdir(tmp_path: Path):
 
     found = find_weibo_json(
         spider_base_path=spider_base,
-        user_id="1842707505",
-        display_name="瓜希酱",
+        user_id="1234567890",
+        display_name="example_weibo_name",
     )
     assert found == weibo_json.resolve()
 
@@ -93,7 +93,7 @@ def test_skip_crawl_imports_existing_x_corpus(tmp_path: Path, monkeypatch):
     spider_base = tmp_path / "spider"
     spider_base.mkdir()
     output_dir = tmp_path / "drive"
-    tweets = output_dir / "twitter" / "DesmondShum" / "tweets.jsonl"
+    tweets = output_dir / "twitter" / "example_handle" / "tweets.jsonl"
     tweets.parent.mkdir(parents=True)
     tweets.write_text(
         "\n".join(
@@ -108,7 +108,7 @@ def test_skip_crawl_imports_existing_x_corpus(tmp_path: Path, monkeypatch):
                         "retweet_count": 0,
                         "reply_count": 0,
                         "view_count": 10,
-                        "user": {"name": "DesmondShum", "nick": "Desmond Shum"},
+                        "user": {"name": "example_handle", "nick": "Example Person"},
                     },
                     ensure_ascii=False,
                 )
@@ -147,7 +147,7 @@ def test_skip_crawl_imports_existing_x_corpus(tmp_path: Path, monkeypatch):
 
     config = load_person_crawl_config(config_path / "person_crawl.yaml", root_dir=project_root)
     result = run_person_crawl_pipeline(
-        "desmond_shum",
+        "example_person",
         config=config,
         root_dir=project_root,
         skip_crawl=True,
@@ -155,7 +155,7 @@ def test_skip_crawl_imports_existing_x_corpus(tmp_path: Path, monkeypatch):
         lang=None,
     )
 
-    corpus = project_root / "knowledge" / "people" / "desmond_shum" / "x" / "corpus.md"
+    corpus = project_root / "knowledge" / "people" / "example_person" / "x" / "corpus.md"
     assert corpus.exists()
     assert result.imported_files
     assert "中文原创推文" in corpus.read_text(encoding="utf-8")

@@ -16,8 +16,8 @@ from typing import Any, Iterable
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_PERSON_ID = "desmond_shum"
-DEFAULT_DISPLAY_NAME = "Desmond Shum"
+DEFAULT_PERSON_ID = "example_person"
+DEFAULT_DISPLAY_NAME = "Example Person"
 
 RT_PREFIX_RE = re.compile(r"^RT @\w+:\s*", re.MULTILINE)
 
@@ -323,7 +323,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--person-name",
         default=DEFAULT_PERSON_ID,
-        help="Person folder name under knowledge/people/, e.g. desmond_shum.",
+        help="Person folder name under knowledge/people/, e.g. example_person.",
     )
     parser.add_argument(
         "--display-name",

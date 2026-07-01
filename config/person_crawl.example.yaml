@@ -1,7 +1,7 @@
-# Person crawler registry: maps agent_roundtable person_id -> spider X/weibo targets.
+# Example registry for person_crawl_agent.
+# Copy to config/person_crawl.yaml (gitignored) and fill in your local targets.
 # spider_base_path can be overridden by SPIDER_BASE_PATH in .env
 
-# Override locally via SPIDER_BASE_PATH in .env
 spider_base_path: ~/GitHub/spider
 
 defaults:
@@ -16,11 +16,14 @@ defaults:
       - posts
 
 people:
-  desmond_shum:
-    display_name: Desmond Shum
+  example_person:
+    display_name: Example Person
     x:
-      user: DesmondShum
+      user: example_handle
       mode: with_replies
       options:
         file-filter: "False"
-    weibo: null
+    weibo:
+      id: "0000000000"
+      name: example_weibo_name
+      modes: [posts]
